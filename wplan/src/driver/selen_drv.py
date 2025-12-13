@@ -8,7 +8,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 
 class BrowserManager:
-    def __init__(self, debug=True):
+    def __init__(self, debug=False):
         self.debug = debug
         self.driver = None
         self.wait = None

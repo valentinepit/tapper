@@ -1,25 +1,54 @@
-from logging import getLogger
+import os
+import sys
 
-from src.actions import wplan_actions
-from src.driver.selen_drv import SeleniumDriver
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel
 
-logger = getLogger(__name__)
+from wplan.src.window.gif_window import WplanApp
 
 
-def main(actions: tuple, url: str):
-    with SeleniumDriver() as browser:
-        logger.info("Start process with url: %s", url)
-        try:
-            browser.open(url)
-            for action in actions:
-                action(browser.driver)
-            logger.info(browser.driver.title)
-            logger.info("Done")
-        except Exception as e:
-            logger.error(e)
+def main():
+    app = QApplication(sys.argv)
+
+    app.setStyle("Fusion")
+
+    if not os.environ.get('WPLAN_LOGIN') or not os.environ.get('WPLAN_PASS'):
+        print("❌ Ошибка: установите переменные окружения:")
+        print("   export WPLAN_LOGIN='ваш_логин'")
+        print("   export WPLAN_PASS='ваш_пароль'")
+        print("\nДобавьте эти строки в ~/.zshrc")
+
+        error_window = QWidget()
+        error_window.setWindowTitle("wplan - Ошибка")
+        error_window.setGeometry(300, 300, 500, 200)
+
+        layout = QVBoxLayout()
+
+        error_icon = QLabel("❌")
+        error_icon.setAlignment(Qt.AlignCenter)
+        error_icon.setFont(QFont("Arial", 48))
+
+        label = QLabel("Установите переменные окружения:\n\n"
+                       "export WPLAN_LOGIN='ваш_логин'\n"
+                       "export WPLAN_PASS='ваш_пароль'\n\n"
+                       "Добавьте в ~/.zshrc")
+        label.setFont(QFont("Monospace", 11))
+        label.setAlignment(Qt.AlignCenter)
+        label.setWordWrap(True)
+
+        layout.addWidget(error_icon)
+        layout.addWidget(label)
+        error_window.setLayout(layout)
+        error_window.show()
+
+        return app.exec_()
+
+    window = WplanApp(auto_start=True)
+    window.show()
+
+    return app.exec_()
 
 
 if __name__ == "__main__":
-    current_actions = (wplan_actions.login, wplan_actions.start_stop_day)
-    current_url = "https://wplan.office.lan/"
-    main(current_actions, current_url)
+    main()
