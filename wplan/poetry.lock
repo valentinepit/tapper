@@ -514,6 +514,104 @@ packaging = ">=22.0"
 setuptools = ">=42.0.0"
 
 [[package]]
+name = "pyqt5"
+version = "5.15.11"
+description = "Python bindings for the Qt cross platform application toolkit"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "PyQt5-5.15.11-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:c8b03dd9380bb13c804f0bdb0f4956067f281785b5e12303d529f0462f9afdc2"},
+    {file = "PyQt5-5.15.11-cp38-abi3-macosx_11_0_x86_64.whl", hash = "sha256:6cd75628f6e732b1ffcfe709ab833a0716c0445d7aec8046a48d5843352becb6"},
+    {file = "PyQt5-5.15.11-cp38-abi3-manylinux_2_17_x86_64.whl", hash = "sha256:cd672a6738d1ae33ef7d9efa8e6cb0a1525ecf53ec86da80a9e1b6ec38c8d0f1"},
+    {file = "PyQt5-5.15.11-cp38-abi3-win32.whl", hash = "sha256:76be0322ceda5deecd1708a8d628e698089a1cea80d1a49d242a6d579a40babd"},
+    {file = "PyQt5-5.15.11-cp38-abi3-win_amd64.whl", hash = "sha256:bdde598a3bb95022131a5c9ea62e0a96bd6fb28932cc1619fd7ba211531b7517"},
+    {file = "PyQt5-5.15.11.tar.gz", hash = "sha256:fda45743ebb4a27b4b1a51c6d8ef455c4c1b5d610c90d2934c7802b5c1557c52"},
+]
+
+[package.dependencies]
+PyQt5-Qt5 = ">=5.15.2,<5.16.0"
+PyQt5-sip = ">=12.15,<13"
+
+[[package]]
+name = "pyqt5-qt5"
+version = "5.15.18"
+description = "The subset of a Qt installation needed by PyQt5."
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "pyqt5_qt5-5.15.18-py3-none-macosx_10_13_x86_64.whl", hash = "sha256:8bb997eb903afa9da3221a0c9e6eaa00413bbeb4394d5706118ad05375684767"},
+    {file = "pyqt5_qt5-5.15.18-py3-none-macosx_11_0_arm64.whl", hash = "sha256:c656af9c1e6aaa7f59bf3d8995f2fa09adbf6762b470ed284c31dca80d686a26"},
+    {file = "pyqt5_qt5-5.15.18-py3-none-manylinux2014_x86_64.whl", hash = "sha256:bf2457e6371969736b4f660a0c153258fa03dbc6a181348218e6f05421682af7"},
+]
+
+[[package]]
+name = "pyqt5-sip"
+version = "12.17.2"
+description = "The sip module support for PyQt5"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pyqt5_sip-12.17.2-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:43c2bc7e7d19eb67998374c49adbaa8072d4261a286bdf64d08382bacae84fb7"},
+    {file = "pyqt5_sip-12.17.2-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:dda1e7e6840935f17fbeb445ec5da63b9b8e7f673317019397611230faeb81a6"},
+    {file = "pyqt5_sip-12.17.2-cp310-cp310-win32.whl", hash = "sha256:2dca03cd1d6c2c843e5de4d0a7b33a7812ed37d576ea65249f1a97c17d9f988b"},
+    {file = "pyqt5_sip-12.17.2-cp310-cp310-win_amd64.whl", hash = "sha256:0005227f10a6221d68f764e24181fe15b770da364fd3a67529ac13f589523991"},
+    {file = "pyqt5_sip-12.17.2-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:a6ce4b763f17ac89ef44716dbfa77ed93677ac502aa402989989508715185e74"},
+    {file = "pyqt5_sip-12.17.2-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:cf8e8a88a3c031dd35bb19c4d7d9a3d65cca84719bed1bc5dd7e2aaf0cf517d2"},
+    {file = "pyqt5_sip-12.17.2-cp311-cp311-win32.whl", hash = "sha256:291d0e2aeddd18081533804150cc59e183b3ab6b4da2b2cf701fdf3ea41ffdda"},
+    {file = "pyqt5_sip-12.17.2-cp311-cp311-win_amd64.whl", hash = "sha256:d53bea28b881cd9a4536c27c0658ae182bfb514dc1ff9235d16d10288010fc59"},
+    {file = "pyqt5_sip-12.17.2-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:0bd1a8e59124a90a05f078bceeb9d4d93c3986c349030487c202fffde6612969"},
+    {file = "pyqt5_sip-12.17.2-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:55ff374feb4bad783241649c7b946e05d7e83d60b0755526ed8fb25bf54e3408"},
+    {file = "pyqt5_sip-12.17.2-cp312-cp312-win32.whl", hash = "sha256:45dc6e2121d175fdab1431c448fd3e88c97caf873a33cb65efa2e9ad0056337b"},
+    {file = "pyqt5_sip-12.17.2-cp312-cp312-win_amd64.whl", hash = "sha256:e3bb16e43afd68dd013228075876cf8f8b1a7d86ba67767dd2c6a97be677c18d"},
+    {file = "pyqt5_sip-12.17.2-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:cfeee3c27f28c091d6a46f8befe9afcfafc76846846bedf1112d403a7299e864"},
+    {file = "pyqt5_sip-12.17.2-cp313-cp313-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:b5df33e198d5d7cccc8e081f80eb97b8d70100f887362074a029a6c19cb92c8b"},
+    {file = "pyqt5_sip-12.17.2-cp313-cp313-win32.whl", hash = "sha256:2c0a278b8fc289d34d4e62bbb9ef6da96b45cc9ab3f6886397b1490d2b4a5604"},
+    {file = "pyqt5_sip-12.17.2-cp313-cp313-win_amd64.whl", hash = "sha256:7e0d663b583a4d3ac63c9fbade2228de6ee628b44a025f5fd964b97dbbcbebc9"},
+    {file = "pyqt5_sip-12.17.2-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:6f03c25a18294f2d66befc4f2adf3f35fceba877b937dc8a94783fa7da8b7345"},
+    {file = "pyqt5_sip-12.17.2-cp314-cp314-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:a6d716801d512643b7b1f50dfbdcd16408fe9a6df907d8627b4ad82190604bec"},
+    {file = "pyqt5_sip-12.17.2-cp314-cp314-win32.whl", hash = "sha256:c617c29524fdcf826e619d77ffd0d6142622f8422adc2608ecc89edd3e605339"},
+    {file = "pyqt5_sip-12.17.2-cp314-cp314-win_amd64.whl", hash = "sha256:b008755d2222a064ec90c525fce5df3fe9d410371e47c43a21c049e07683b7fb"},
+    {file = "pyqt5_sip-12.17.2.tar.gz", hash = "sha256:7f66565c2a13d34d8ad6aad08e953d355ea3fe466d991d51aa5a0966a5289f05"},
+]
+
+[[package]]
+name = "pyqtwebengine"
+version = "5.15.7"
+description = "Python bindings for the Qt WebEngine framework"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "PyQtWebEngine-5.15.7-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:e17187d9a3db3bab041f31385ed72832312557fefc5bd63ae4692df306dc1572"},
+    {file = "PyQtWebEngine-5.15.7-cp38-abi3-macosx_11_0_x86_64.whl", hash = "sha256:021814af1ff7d8be447c5314891cd4ddc931deae393dc2d38a816569aa0eb8cd"},
+    {file = "PyQtWebEngine-5.15.7-cp38-abi3-manylinux_2_17_x86_64.whl", hash = "sha256:965461ca0cf414e03bd510a9a0e2ea36dc21deaa7fc4a631be4a1f2aa0327179"},
+    {file = "PyQtWebEngine-5.15.7-cp38-abi3-win32.whl", hash = "sha256:c0680527b1af3e0145ce5e0f2ba2156ff0b4b38844392cf0ddd37ede6a9edeab"},
+    {file = "PyQtWebEngine-5.15.7-cp38-abi3-win_amd64.whl", hash = "sha256:bd5e8c426d6f6b352cd15800d64a89b2a4a11e098460b818c7bdcf5e5612e44f"},
+    {file = "PyQtWebEngine-5.15.7.tar.gz", hash = "sha256:f121ac6e4a2f96ac289619bcfc37f64e68362f24a346553f5d6c42efa4228a4d"},
+]
+
+[package.dependencies]
+PyQt5 = ">=5.15.4"
+PyQt5-sip = ">=12.13,<13"
+PyQtWebEngine-Qt5 = ">=5.15.0,<5.16.0"
+
+[[package]]
+name = "pyqtwebengine-qt5"
+version = "5.15.18"
+description = "The subset of a Qt installation needed by PyQtWebEngine."
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "pyqtwebengine_qt5-5.15.18-py3-none-macosx_10_13_x86_64.whl", hash = "sha256:0cea1127caa6a78ce29cc7ad1a951e99d3daf677b3261dc05f1363d5f5ff21a9"},
+    {file = "pyqtwebengine_qt5-5.15.18-py3-none-macosx_11_0_arm64.whl", hash = "sha256:3274a8047ae2620c431a91983d9705b7fb25bd813d731040e7af01a9dc1dd011"},
+    {file = "pyqtwebengine_qt5-5.15.18-py3-none-manylinux2014_x86_64.whl", hash = "sha256:5765ee9ccdfe4841d6bac0e39da0690927c8bbcd943f2254098489c1140d6d6f"},
+]
+
+[[package]]
 name = "pysocks"
 version = "1.7.1"
 description = "A Python SOCKS client module. See https://github.com/Anorov/PySocks for more information."
@@ -763,4 +861,4 @@ h11 = ">=0.16.0,<1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.13"
-content-hash = "22c9d82b517427186d1568597da158c34e3e2f422e4b3d655eb839f18814a06c"
+content-hash = "a1c158223f5faa07e9be7afd4f9dde05e67a844635f3b1564bdd4501c893ad5c"
