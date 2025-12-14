@@ -1,23 +1,30 @@
-Из dist копируем себе wplan.sh
+# WPLAN cron setup
 
-Создаем файл wplan_starter.sh
+## Подготовка
 
-#!/bin/bash
-export WPLAN_LOGIN="YOUR LOGIN"
-export WPLAN_PASS="YOUR PASSWORD"
-echo "=== Запуск wplan в $(date) ===" >> ~/wplan_cron.log
-echo $WPLAN_PASS
+- Из папки `dist` копируем себе файл **wplan.sh**.
 
-/PATH_TO_WPLAN/wplan.sh 2>&1 | tee -a ~/wplan_cron.log
+- Создаём файл **wplan_starter.sh**  
+- или копируем его из `dist`.
+- Вставляем в него свои креды
 
-echo "=== Завершено с кодом $? ===" >> ~/wplan_cron.log
-EOF
+---
 
-После этого редактируем свой крон командой crontab -e
+## Настройка cron
 
-Для первичного теста - каждые 5 минут
+После этого редактируем свой cron командой:
+
+```bash
+crontab -e
+
+Первичный тест (каждые 5 минут)
 */5 * * * * /PATH_TO_WPLAN/wplan_starter.sh
 
-для запуска на вкл выкл два раза в день
+Запуск при включении / выключении (2 раза в день)
 0 10 * * 1-5 /Users/valentin/wplan_cron.sh
 0 19 * * 1-4 /Users/valentin/wplan_cron.sh
+
+```
+
+## Все работает!!
+Если хочется убрать окошко браузера, то нужно поставить в main.py в 11 строке Debug = False
