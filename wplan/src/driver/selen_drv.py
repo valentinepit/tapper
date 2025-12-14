@@ -1,9 +1,8 @@
 import time
 
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
 
@@ -11,7 +10,6 @@ class BrowserManager:
     def __init__(self, debug: bool = False):
         self.debug = debug
         self.driver = None
-        self.driver = self.get_driver()
 
     def get_driver(self):
         if self.driver is not None:
@@ -19,7 +17,7 @@ class BrowserManager:
 
         chrome_options = Options()
 
-        if self.debug:
+        if not self.debug:
             chrome_options.add_argument("--headless=new")
 
         chrome_options.add_argument("--start-maximized")
@@ -45,11 +43,6 @@ class BrowserManager:
         print(f"Заголовок: {self.driver.title}")
         print(f"URL: {self.driver.current_url}")
 
-        if self.debug:
-            screenshot_path = f"/tmp/wplan_debug_{int(time.time())}.png"
-            self.driver.save_screenshot(screenshot_path)
-            print(f"📸 Скриншот сохранен: {screenshot_path}")
-
     def execute_action(self, action_func):
 
         if not self.driver:
@@ -58,6 +51,7 @@ class BrowserManager:
         return action_func(self.driver)
 
     def __enter__(self):
+        self.get_driver()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

@@ -1,4 +1,4 @@
-from wplan.src.driver import BrowserManager
+from src.driver import BrowserManager
 from src.actions import actions
 
 import logging
@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    current_url = 'https://wplan.ru/login'
+    current_url = 'https://wplan.office.lan'
     with BrowserManager(debug=True) as browser:
         logger.info(f'Opening {current_url}')
         browser.open(current_url)
