@@ -408,14 +408,10 @@ class WplanApp(QWidget):
         if self.movie:
             self.movie.stop()
 
-        # Останавливаем таймер
+        #  таймер
         if self.progress_timer.isActive():
             self.progress_timer.stop()
 
-        # Принимаем событие закрытия
         event.accept()
 
         print("✅ Окно закрыто. Приложение завершится нормально.")
-
-        # НЕ вызываем QApplication.quit() здесь!
-        # PyQt автоматически завершит приложение когда все окна закрыты
