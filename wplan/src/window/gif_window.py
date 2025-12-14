@@ -7,9 +7,9 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QProgressBar, QSplitter,
                              QTextEdit, QGroupBox)
 
-from wplan.src.actions import wplan_actions as actions
-from wplan.src.driver.selen_drv import BrowserManager
-from wplan.src.window.styles import start_button_style, push_button_style, group_box_style, label_style, label_style_2, \
+from ..actions import wplan_actions as actions
+from ..driver.selen_drv import BrowserManager
+from .styles import start_button_style, push_button_style, group_box_style, label_style, label_style_2, \
     current_action_style, speeds, descriptions, success_blink_style, complite_style, logs_style, progress_bar_style, \
     status_style, header_style, loaded_gif_style
 

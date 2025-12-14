@@ -5,7 +5,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel
 
-from wplan.src.window.gif_window import WplanApp
+from src.window.gif_window import WplanApp
 
 
 def main():
