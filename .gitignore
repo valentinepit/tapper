@@ -1,3 +1,8 @@
 .idea
 .venv
 .pytest_cache
+
+# Claude Code / graphify
+.claude.MD
+.claude/
+**/graphify-out/
