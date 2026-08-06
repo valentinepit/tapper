@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import date, datetime
 
 # from src.driver import BrowserManager
 # from src.actions import actions
@@ -22,6 +22,14 @@ async def run_api_flow():
     async with WplanApiClient() as client:
         user = await client.login(username, password)
         logger.info(f'Logged in as {user["fio"]}')
+
+        today = date.today().isoformat()
+        absences = await client.get_absences()
+        on_absence = any(a['startDate'] <= today <= a['endDate'] for a in absences)
+        if on_absence:
+            logger.info(f'{today} falls within an absence period - skipping start_end_workday')
+            return
+
         result = await client.start_end_workday(is_start=is_start)
         logger.info(f'start_end_workday(is_start={is_start}) -> {result}')
 

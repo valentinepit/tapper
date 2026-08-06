@@ -1,6 +1,7 @@
 .idea
 .venv
 .pytest_cache
+.env
 
 # Claude Code / graphify
 .claude.MD

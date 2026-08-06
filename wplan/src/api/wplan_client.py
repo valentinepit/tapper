@@ -102,3 +102,9 @@ class WplanApiClient:
         return await self._graphql_post(
             "StartOrFinishDay", {"isStart": is_start}, settings.START_FINISH_QUERY_HASH
         )
+
+    async def get_absences(self) -> list:
+        data = await self._graphql_get(
+            "AbsenceRequestAllPersonal", {}, settings.ABSENCES_QUERY_HASH
+        )
+        return data["absenceRequestAllPersonal"]
