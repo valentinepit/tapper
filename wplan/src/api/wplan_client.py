@@ -18,7 +18,10 @@ class WplanApiClient:
         self._access_token: str | None = None
 
     async def __aenter__(self) -> "WplanApiClient":
-        self._session = aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar())
+        # wplan.office.lan использует внутренний self-signed сертификат, которому
+        # не доверяет стандартный certifi-bundle aiohttp (хотя ОС/браузер его знают).
+        connector = aiohttp.TCPConnector(ssl=False)
+        self._session = aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar(), connector=connector)
         return self
 
     async def __aexit__(self, *exc) -> None:
@@ -69,11 +72,20 @@ class WplanApiClient:
             return self._unwrap(await resp.json())
 
     async def login(self, username: str, password: str) -> dict:
+        # Как в браузере: заход на страницу входа заводит cookie-сессию
+        # (NEXT_LOCALE и т.п.), без которой Login отвечает INVALID_USER_OR_PASSWORD
+        # даже с верными кредами.
+        async with self._session.get(f"{self.base_url}/ru-RU/sign-in") as resp:
+            resp.raise_for_status()
+
         variables = {
             "username": username,
             "password": password,
             "accessToken2Fa": "",
             "twoFactorCode": "",
+            "code": "",
+            "redirectUri": "",
+            "source": 1,
         }
         data = await self._graphql_post("Login", variables, settings.LOGIN_QUERY_HASH)
         user = data["jwtLogin"]
