@@ -26,6 +26,9 @@ VACATIONS_QUERY_HASH = os.environ["VACATIONS_QUERY_HASH"]
 START_FINISH_QUERY_HASH = os.environ["START_FINISH_QUERY_HASH"]
 ABSENCES_QUERY_HASH = os.environ["ABSENCES_QUERY_HASH"]
 
-# Между утренним (~10:00) и вечерним (~19:00) запуском - середина дня,
-# используется как граница, чтобы отличить "начать день" от "завершить день".
-DAY_START_CUTOFF_HOUR = 14
+# Между утренним (~10:00) и вечерним (~18:00) запуском ПО МЕСТНОМУ ВРЕМЕНИ
+# ОФИСА (Europe/Moscow, UTC+3) - используется как граница, чтобы отличить
+# "начать день" от "завершить день". datetime.now() берёт локальное время
+# СЕРВЕРА (обычно UTC на VPS), поэтому это не 14, а 14-3=11 - если сервер
+# не в UTC, пересчитайте под его локальный часовой пояс.
+DAY_START_CUTOFF_HOUR = 11
