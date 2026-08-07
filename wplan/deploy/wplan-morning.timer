@@ -1,8 +1,11 @@
 [Unit]
-Description=Run wplan.service around 10:00 (+-5 min jitter)
+Description=Run wplan.service around 10:00 Europe/Moscow (+-5 min jitter)
 
 [Timer]
-OnCalendar=Mon..Fri *-*-* 09:55:00
+# 06:55 UTC = 09:55 MSK (Europe/Moscow, UTC+3) - server assumed to run in UTC.
+# If your server's local timezone differs, adjust this to match, or run
+# `timedatectl set-timezone Europe/Moscow` and use 09:55 here instead.
+OnCalendar=Mon..Fri *-*-* 06:55:00
 RandomizedDelaySec=600
 Persistent=true
 Unit=wplan.service

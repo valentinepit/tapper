@@ -182,9 +182,14 @@ systemctl enable --now wplan-morning.timer wplan-evening.timer
 ```
 
 **Важно про часовой пояс:** `OnCalendar=` в таймерах и `DAY_START_CUTOFF_HOUR`
-в `main.py` (граница "начать"/"завершить" день) считаются в **локальном
-времени VPS**. Если сервер не в том же часовом поясе, что офис — либо
-`timedatectl set-timezone <Зона>`, либо пересчитайте время в `OnCalendar=`.
+в `src/settings.py` (граница "начать"/"завершить" день) считаются в
+**локальном времени VPS**, а офис — в `Europe/Moscow` (UTC+3). Шаблоны в
+`deploy/*.timer` и `DAY_START_CUTOFF_HOUR=11` в `src/settings.py` уже
+рассчитаны на то, что VPS работает в **UTC** (типичный дефолт для большинства
+VPS-провайдеров) — 06:55/14:55 UTC = 09:55/17:55 MSK. Если ваш сервер в
+другом часовом поясе — либо `timedatectl set-timezone Europe/Moscow` и
+верните `OnCalendar=` к 09:55/17:55 + `DAY_START_CUTOFF_HOUR=14`, либо
+пересчитайте оба под фактический пояс сервера сами.
 
 ### 7. Проверка
 
