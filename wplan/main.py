@@ -12,13 +12,11 @@ logger = logging.getLogger(__name__)
 async def run_api_flow():
     logger.info('Starting API flow')
     try:
-        username = settings.WPLAN_LOGIN
-        password = settings.WPLAN_PASS
         is_start = datetime.now().hour < settings.DAY_START_CUTOFF_HOUR
 
         async with WplanApiClient() as client:
-            logger.info(f'Logging in as {username}')
-            user = await client.login(username, password)
+            logger.info(f'Logging in as {settings.WPLAN_LOGIN}')
+            user = await client.login(settings.WPLAN_LOGIN, settings.WPLAN_PASS)
             logger.info(f'Logged in as {user["fio"]}')
 
             logger.info('Fetching absences')
