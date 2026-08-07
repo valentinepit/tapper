@@ -3,7 +3,7 @@ import logging
 from datetime import date, datetime
 
 from src import settings
-from src.api import WplanApiClient
+from src.api import WplanApiClient, WplanApiError
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,14 @@ async def run_api_flow():
             return
 
         logger.info(f'Calling start_end_workday(is_start={is_start})')
-        result = await client.start_end_workday(is_start=is_start)
+        try:
+            result = await client.start_end_workday(is_start=is_start)
+        except WplanApiError as e:
+            errors = e.args[0] if e.args else []
+            if errors and errors[0].get('message') == 'EDITING_NOT_AVAILABLE':
+                logger.info(f'Day already in the requested state (is_start={is_start}) - nothing to do')
+                return
+            raise
         logger.info(f'start_end_workday(is_start={is_start}) -> {result}')
 
     logger.info('Done')
