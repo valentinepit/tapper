@@ -1,28 +1,6 @@
 import asyncio
 import logging
-import os
 from datetime import date, datetime
-
-# PyInstaller overrides LD_LIBRARY_PATH for its bundled libs, which breaks glibc's
-# NSS "resolve" module (systemd-resolved integration) - DNS lookups fail inside the
-# frozen binary even though the same hostname resolves fine via system tools.
-# Restoring the pre-bootloader value (saved by PyInstaller as LD_LIBRARY_PATH_ORIG)
-# before any network code runs is the documented workaround.
-if 'LD_LIBRARY_PATH_ORIG' in os.environ:
-    os.environ['LD_LIBRARY_PATH'] = os.environ['LD_LIBRARY_PATH_ORIG']
-else:
-    os.environ.pop('LD_LIBRARY_PATH', None)
-
-if os.environ.get('WPLAN_DEBUG_DNS'):
-    import socket
-    print('LD_LIBRARY_PATH_ORIG:', repr(os.environ.get('LD_LIBRARY_PATH_ORIG')))
-    print('LD_LIBRARY_PATH:', repr(os.environ.get('LD_LIBRARY_PATH')))
-    for host in ('google.com', 'wplan.office.lan'):
-        try:
-            print(host, '->', socket.getaddrinfo(host, 443))
-        except Exception as e:
-            print(host, '-> ERROR', repr(e))
-    raise SystemExit(0)
 
 from src import settings
 from src.api import WplanApiClient
