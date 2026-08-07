@@ -13,6 +13,17 @@ if 'LD_LIBRARY_PATH_ORIG' in os.environ:
 else:
     os.environ.pop('LD_LIBRARY_PATH', None)
 
+if os.environ.get('WPLAN_DEBUG_DNS'):
+    import socket
+    print('LD_LIBRARY_PATH_ORIG:', repr(os.environ.get('LD_LIBRARY_PATH_ORIG')))
+    print('LD_LIBRARY_PATH:', repr(os.environ.get('LD_LIBRARY_PATH')))
+    for host in ('google.com', 'wplan.office.lan'):
+        try:
+            print(host, '->', socket.getaddrinfo(host, 443))
+        except Exception as e:
+            print(host, '-> ERROR', repr(e))
+    raise SystemExit(0)
+
 from src import settings
 from src.api import WplanApiClient
 
