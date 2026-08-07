@@ -10,12 +10,16 @@ GraphQL API `wplan.office.lan` напрямую (без браузера): ло�
 `main.py` → `src/api/WplanApiClient`:
 1. `login(username, password)` — GraphQL mutation `Login`.
 2. `get_absences()` — GraphQL query `AbsenceRequestAllPersonal`, весь список отпусков/day-off'ов без фильтра.
-3. Если сегодняшняя дата попадает в один из периодов из шага 2 — ничего не делаем.
-4. Иначе `start_end_workday(is_start=...)` — GraphQL mutation `StartOrFinishDay`. `is_start` определяется по времени суток (`DAY_START_CUTOFF_HOUR` в `main.py`, по умолчанию до 14:00 — начать день, после — завершить).
+3. Если сегодняшняя дата попадает в один из периодов из шага 2 — ничего не делаем (тихо, без уведомления).
+4. Иначе `start_end_workday(is_start=...)` — GraphQL mutation `StartOrFinishDay`. `is_start` определяется по времени суток (`DAY_START_CUTOFF_HOUR` в `src/settings.py`, по умолчанию до 11:00 UTC / 14:00 MSK — начать день, после — завершить).
 
 Ошибка сервера `EDITING_NOT_AVAILABLE` ("день уже был начат/завершён ранее") —
 не баг, а штатная ситуация (кто-то/что-то уже переключил день); код логирует
-её как INFO и завершается без ошибки.
+её как INFO и завершается без ошибки (тоже без уведомления).
+
+После реального успешного `start_end_workday` или любой другой (настоящей)
+ошибки в Telegram приходит уведомление — см. "Настройка Telegram-уведомлений"
+ниже.
 
 ## Переменные окружения
 
@@ -27,6 +31,8 @@ GraphQL API `wplan.office.lan` напрямую (без браузера): ло�
 | `VACATIONS_QUERY_HASH` | хэш query `PersonalVacationsByWorkingDays` | нет |
 | `START_FINISH_QUERY_HASH` | хэш mutation `StartOrFinishDay` | нет |
 | `ABSENCES_QUERY_HASH` | хэш query `AbsenceRequestAllPersonal` | нет |
+| `TELEGRAM_BOT_TOKEN` | токен личного бота-нотификатора (от @BotFather) | умеренно (доступ к боту, не к аккаунту) |
+| `TELEGRAM_CHAT_ID` | ваш chat_id, куда бот шлёт сообщения | нет |
 
 Хэши — это Apollo persisted-query sha256 конкретного деплоя wplan (одинаковые
 для всех сотрудников одной компании, не персональные секреты). Если у вас
@@ -36,6 +42,27 @@ DevTools → Network при логине/клике на сайте (см. `oper
 
 `wplan.office.lan` резолвится и открывается только из корпоративной сети —
 для запуска откуда-либо ещё нужен VPN-туннель в эту сеть.
+
+## Настройка Telegram-уведомлений
+
+При успешном начале/окончании дня или при реальной ошибке бот присылает
+сообщение в личку (тихие "штатные" случаи — отпуск, уже сделано кем-то — не
+уведомляются, см. выше). Через Bot API (не через авторизацию как
+пользователь) — проще и безопаснее для сервера без присмотра.
+
+1. В Telegram написать **@BotFather** → `/newbot` → следовать подсказкам → получить токен (`TELEGRAM_BOT_TOKEN`).
+2. Написать своему новому боту `/start` (боты не могут писать первыми — нужно самому начать диалог хотя бы раз).
+3. Узнать свой `chat_id`:
+   ```bash
+   curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates"
+   ```
+   В ответе найти `"chat":{"id":...}` — это `TELEGRAM_CHAT_ID`.
+4. Добавить обе переменные в `.env` (локально) и/или `/etc/wplan/wplan.env` (на VPS).
+
+Проверить отдельно от основного флоу:
+```bash
+poetry run python -c "import asyncio; from src.notify import send_telegram_message; asyncio.run(send_telegram_message('test'))"
+```
 
 ## Локальный запуск (разработка)
 
@@ -139,14 +166,14 @@ chmod +x /opt/wplan/wplan-api
 
 ### 5. Секреты
 
-Несекретные значения (логин + 4 хэша) — в `/etc/wplan/wplan.env`:
+Несекретные значения (логин + 4 хэша + Telegram) — в `/etc/wplan/wplan.env`:
 
 ```bash
 mkdir -p /etc/wplan
 cat > /etc/wplan/wplan.env
 ```
 
-Впишите (свои значения, `Ctrl+D` в конце):
+Впишите (свои значения, `Ctrl+D` в конце; про `TELEGRAM_*` см. "Настройка Telegram-уведомлений" выше):
 
 ```
 WPLAN_LOGIN=your_login@office.lan
@@ -154,6 +181,8 @@ LOGIN_QUERY_HASH=...
 VACATIONS_QUERY_HASH=...
 START_FINISH_QUERY_HASH=...
 ABSENCES_QUERY_HASH=...
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
 ```
 
 ```bash
@@ -216,9 +245,10 @@ cp dist/wplan-api /opt/wplan/wplan-api
 ## Структура проекта
 
 ```
-main.py                 - точка входа: login -> проверка отсутствий -> start/end day
+main.py                 - точка входа: login -> проверка отсутствий -> start/end day -> Telegram
 src/settings.py         - переменные окружения (+ systemd-creds на проде)
 src/api/wplan_client.py - GraphQL-клиент (aiohttp)
+src/notify.py           - отправка уведомлений в Telegram (Bot API)
 wplan-api.spec          - PyInstaller-спек для сборки бинарника
 deploy/                 - шаблоны systemd-юнитов (сервис, таймеры, override для VPN)
 ```

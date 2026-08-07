@@ -26,6 +26,9 @@ VACATIONS_QUERY_HASH = os.environ["VACATIONS_QUERY_HASH"]
 START_FINISH_QUERY_HASH = os.environ["START_FINISH_QUERY_HASH"]
 ABSENCES_QUERY_HASH = os.environ["ABSENCES_QUERY_HASH"]
 
+TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+
 # Между утренним (~10:00) и вечерним (~18:00) запуском ПО МЕСТНОМУ ВРЕМЕНИ
 # ОФИСА (Europe/Moscow, UTC+3) - используется как граница, чтобы отличить
 # "начать день" от "завершить день". datetime.now() берёт локальное время
