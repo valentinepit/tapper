@@ -25,3 +25,7 @@ LOGIN_QUERY_HASH = os.environ["LOGIN_QUERY_HASH"]
 VACATIONS_QUERY_HASH = os.environ["VACATIONS_QUERY_HASH"]
 START_FINISH_QUERY_HASH = os.environ["START_FINISH_QUERY_HASH"]
 ABSENCES_QUERY_HASH = os.environ["ABSENCES_QUERY_HASH"]
+
+# Между утренним (~10:00) и вечерним (~19:00) запуском - середина дня,
+# используется как граница, чтобы отличить "начать день" от "завершить день".
+DAY_START_CUTOFF_HOUR = 14

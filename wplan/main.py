@@ -7,17 +7,13 @@ from src.api import WplanApiClient, WplanApiError
 
 logger = logging.getLogger(__name__)
 
-# Между утренним (~10:00) и вечерним (~19:00) cron-запуском из README - середина
-# дня, используется как граница, чтобы отличить "начать день" от "завершить день".
-DAY_START_CUTOFF_HOUR = 14
-
 
 async def run_api_flow():
     logger.info('Starting API flow')
 
     username = settings.WPLAN_LOGIN
     password = settings.WPLAN_PASS
-    is_start = datetime.now().hour < DAY_START_CUTOFF_HOUR
+    is_start = datetime.now().hour < settings.DAY_START_CUTOFF_HOUR
 
     async with WplanApiClient() as client:
         logger.info(f'Logging in as {username}')
