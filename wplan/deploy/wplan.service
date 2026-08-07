@@ -1,0 +1,10 @@
+[Unit]
+Description=WPlan API automation
+After=openvpn-client@YOUR_VPN_CONFIG_NAME.service
+Requires=openvpn-client@YOUR_VPN_CONFIG_NAME.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/wplan/wplan-api
+EnvironmentFile=/etc/wplan/wplan.env
+LoadCredentialEncrypted=wplan_pass:/etc/wplan/wplan_pass.cred

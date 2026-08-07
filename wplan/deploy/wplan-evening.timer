@@ -1,0 +1,11 @@
+[Unit]
+Description=Run wplan.service around 18:00 (+-5 min jitter)
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 17:55:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=wplan.service
+
+[Install]
+WantedBy=timers.target
