@@ -19,7 +19,60 @@ GraphQL API `wplan.office.lan` напрямую (без браузера): ло�
 
 После реального успешного `start_end_workday` или любой другой (настоящей)
 ошибки в Telegram приходит уведомление — см. "Настройка Telegram-уведомлений"
-ниже.
+ниже. В уведомление об ошибке уходит только класс исключения или коды
+GraphQL-ошибок, но не текст исключения целиком: в нём оказывались внутренний
+хостнейм и полный URL эндпоинта, а Telegram — сторонний сервис. Подробности
+всегда в журнале: `journalctl -u wplan`.
+
+## TLS: проверка сертификата wplan
+
+`wplan.office.lan` выписан внутренним AD CS, цепочка
+`wplan.office.lan` → `office-SUB-CA` → `RCA-CA`. Этого корня нет в bundle
+`certifi`, поэтому раньше в клиенте стояло `ssl=False` — а это отключало не
+только проверку цепочки, но и сверку имени хоста, то есть любой на пути
+трафика внутри сети мог перехватить логин, пароль и `accessToken`.
+
+Сейчас клиент доверяет **только** корпоративному корню. Он лежит в
+`src/api/wplan-ca.pem` — это публичные данные, сервер отдаёт их каждому
+TLS-клиенту, секрета в файле нет. Закреплён именно корень (действует до 2039),
+а не листовой сертификат `wplan.office.lan` (истекает 26.04.2027): иначе
+пиннинг ломался бы при каждой ротации листа. Сверка имени хоста включена —
+у листа есть корректный `SAN DNS:wplan.office.lan`.
+
+Файл вкладывается внутрь собранного бинаря через `datas` в `wplan-api.spec`,
+на рантайме читается из `sys._MEIPASS` (см. `_ca_bundle_path()`).
+
+**Если появилась ошибка `CERTIFICATE_VERIFY_FAILED`** — скорее всего сменился
+корневой CA. Снять цепочку заново (нужен доступ к wplan, то есть VPN):
+
+```bash
+openssl s_client -showcerts -connect wplan.office.lan:443 </dev/null 2>/dev/null \
+  | awk '/BEGIN CERT/,/END CERT/'
+```
+
+В `src/api/wplan-ca.pem` оставить два **последних** блока цепочки —
+промежуточный CA и корень, — затем пересобрать бинарь.
+
+## Тесты
+
+```bash
+poetry install          # dev-группа с pytest ставится по умолчанию
+poetry run pytest -q    # ожидается 20 passed
+```
+
+`tests/test_security_regressions.py` закрепляет исправления аудита
+безопасности: включённую проверку TLS и состав закреплённых CA (в том числе
+их срок действия), отсутствие утечки Telegram-токена в журнал, фильтрацию
+текста исключений перед отправкой в Telegram, очистку `accessToken`,
+внятные ошибки конфигурации. Тесты работают на фиктивном окружении из
+`tests/conftest.py` и не ходят в сеть, поэтому запускаются без VPN.
+
+Статический анализ:
+
+```bash
+poetry run bandit -r src main.py
+poetry run pip-audit          # если установлен: проверка CVE в зависимостях
+```
 
 ## Переменные окружения
 
@@ -33,6 +86,17 @@ GraphQL API `wplan.office.lan` напрямую (без браузера): ло�
 | `ABSENCES_QUERY_HASH` | хэш query `AbsenceRequestAllPersonal` | нет |
 | `TELEGRAM_BOT_TOKEN` | токен личного бота-нотификатора (от @BotFather) | умеренно (доступ к боту, не к аккаунту) |
 | `TELEGRAM_CHAT_ID` | ваш chat_id, куда бот шлёт сообщения | нет |
+| `WPLAN_SKIP_DOTENV` | `1` отключает чтение `.env` (нужно только тестам) | нет |
+
+Если обязательная переменная не задана, приложение падает на старте с
+понятным `ConfigError`, а не с голым `KeyError` — но падает намеренно:
+работать с пустым паролем хуже, чем не запуститься.
+
+`TELEGRAM_BOT_TOKEN` подставляется в URL Bot API, поэтому в `src/notify.py`
+нельзя вызывать `resp.raise_for_status()` и логировать исключения с
+трейсбеком: строковое представление `aiohttp.ClientResponseError` содержит
+URL целиком, и токен утёк бы в journald. За этим следит тест
+`test_h3_token_never_reaches_the_log`.
 
 Хэши — это Apollo persisted-query sha256 конкретного деплоя wplan (одинаковые
 для всех сотрудников одной компании, не персональные секреты). Если у вас
@@ -68,10 +132,13 @@ poetry run python -c "import asyncio; from src.notify import send_telegram_messa
 
 1. `poetry install`
 2. Скопировать `.env.example` (в корне репозитория, на уровень выше `wplan/`) в `.env` и вписать свои `WPLAN_LOGIN`/`WPLAN_PASS` (хэши там уже настоящие, менять не нужно, если это тот же деплой wplan).
-3. `poetry run python main.py`
+3. `poetry run pytest -q` — быстрая проверка, что окружение и код в порядке (VPN не требуется).
+4. `poetry run python main.py`
 
-Локально быть в корпоративной сети (или подключённым к её VPN) обязательно —
-иначе `wplan.office.lan` не резолвится.
+Быть в корпоративной сети (или подключённым к её VPN) обязательно для шага 4 —
+иначе `wplan.office.lan` не резолвится. Учтите, что шаг 4 выполняет реальное
+действие: начинает или завершает ваш рабочий день в WPlan, в зависимости от
+текущего часа и `DAY_START_CUTOFF_HOUR`.
 
 ## Продакшен: разворачивание на Linux VPS
 
@@ -136,12 +203,25 @@ systemctl daemon-reload
 systemctl restart openvpn-client@<name>
 ```
 
-Проверка:
+Проверка резолвинга и доступности:
 
 ```bash
 getent hosts wplan.office.lan
 curl -k -sS -o /dev/null -w "HTTP %{http_code}\n" --max-time 5 https://wplan.office.lan/
 ```
+
+`-k` здесь только потому, что корпоративного корня нет в системном хранилище
+VPS — это проверка сетевой связности, а не сертификата. Само приложение
+проверку **не** отключает: оно доверяет `src/api/wplan-ca.pem`. После шага 3
+связку можно проверить уже строго, без `-k`:
+
+```bash
+curl --cacert /opt/wplan-src/wplan/src/api/wplan-ca.pem \
+     -sS -o /dev/null -w "HTTP %{http_code}\n" --max-time 5 https://wplan.office.lan/
+```
+
+Если эта команда проходит, а `curl -k` тоже — значит пиннинг рабочий и бинарь
+сможет подключиться.
 
 ### 3. Python / Poetry / код
 
@@ -153,18 +233,58 @@ cd wplan
 ~/.local/bin/poetry install
 ```
 
-### 4. Сборка бинарника
+### 4. Тесты и сборка бинарника
+
+Сначала тесты — они проверяют ровно те места, где легко всё сломать
+(TLS-пиннинг, обращение с токеном, конфигурация):
+
+```bash
+~/.local/bin/poetry run pytest -q          # ожидается 20 passed
+```
 
 PyInstaller не кросс-компилирует — собирайте прямо на целевом сервере (не на macOS/Windows с последующим копированием):
 
 ```bash
-~/.local/bin/poetry run pyinstaller wplan-api.spec
-mkdir -p /opt/wplan
-cp dist/wplan-api /opt/wplan/wplan-api
-chmod +x /opt/wplan/wplan-api
+~/.local/bin/poetry run pyinstaller --clean --noconfirm wplan-api.spec
 ```
 
-### 5. Секреты
+Убедитесь, что корпоративный CA попал внутрь бинаря — без него запуск упадёт
+с ошибкой «Не найден файл доверенных сертификатов»:
+
+```bash
+~/.local/bin/poetry run pyi-archive_viewer -l dist/wplan-api | grep -i pem
+```
+
+Ожидается строка, оканчивающаяся на `'src/api/wplan-ca.pem'`. Искать в бинаре
+текст `BEGIN CERTIFICATE` бесполезно: `datas` лежат в сжатом CArchive, и
+содержимое файлов в `strings` не появляется даже когда всё вложено правильно —
+открытым текстом в TOC хранится только имя файла (`strings dist/wplan-api |
+grep -c 'wplan-ca.pem'` вернёт `1`).
+
+### 5. Системный пользователь
+
+Приложению не нужен root: оно только ходит в сеть и распаковывает свой
+PyInstaller-архив в приватный `/tmp`. Запуск от root означал бы, что любая
+уязвимость в `aiohttp`, парсере JSON или bootloader'е компрометирует весь VPS,
+а не один аккаунт wplan.
+
+```bash
+useradd --system --no-create-home --shell /usr/sbin/nologin wplan
+id wplan
+```
+
+### 6. Установка бинарника
+
+```bash
+mkdir -p /opt/wplan
+install -o root -g root -m 0755 dist/wplan-api /opt/wplan/wplan-api
+ls -l /opt/wplan/wplan-api
+```
+
+Владелец — `root`, пользователь `wplan` только читает и исполняет: так сервис
+не сможет подменить собственный исполняемый файл.
+
+### 7. Секреты
 
 Несекретные значения (логин + 4 хэша + Telegram) — в `/etc/wplan/wplan.env`:
 
@@ -188,6 +308,7 @@ TELEGRAM_CHAT_ID=...
 ```bash
 chown root:root /etc/wplan/wplan.env
 chmod 600 /etc/wplan/wplan.env
+chown root:root /etc/wplan && chmod 700 /etc/wplan
 ```
 
 Пароль — отдельно, зашифрован через `systemd-creds` (не лежит на диске в
@@ -197,18 +318,48 @@ chmod 600 /etc/wplan/wplan.env
 ```bash
 systemd-creds encrypt --name=wplan_pass - /etc/wplan/wplan_pass.cred
 # ввести пароль, затем Ctrl+D
+chown root:root /etc/wplan/wplan_pass.cred
 chmod 600 /etc/wplan/wplan_pass.cred
 ```
 
-### 6. systemd-сервис и таймеры
+**Права на секреты остаются строгими `root:root 600` даже при `User=wplan`.**
+И `EnvironmentFile=`, и `LoadCredentialEncrypted=` обрабатывает сам systemd от
+root ещё до сброса привилегий: процесс получает готовые переменные окружения и
+расшифрованный credential в tmpfs, а файлов не читает. Давать группе `wplan`
+доступ к ним не нужно — проверить можно так (ожидается `Permission denied`,
+и это правильный результат):
+
+```bash
+sudo -u wplan cat /etc/wplan/wplan.env
+```
+
+### 8. systemd-сервис и таймеры
 
 ```bash
 cp deploy/wplan.service /etc/systemd/system/wplan.service
 sed -i 's/YOUR_VPN_CONFIG_NAME/<name>/' /etc/systemd/system/wplan.service
+
+# контроль: заглушка заменена, User=wplan на месте
+grep -nE 'openvpn-client@|^User=|^Group=' /etc/systemd/system/wplan.service
+
 cp deploy/wplan-morning.timer deploy/wplan-evening.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now wplan-morning.timer wplan-evening.timer
 ```
+
+Юнит запускается от `wplan` и закрыт набором директив изоляции
+(`ProtectSystem=strict`, `PrivateTmp`, `NoNewPrivileges`, пустой
+`CapabilityBoundingSet`, `SystemCallFilter=@system-service` и прочие).
+Оценить результат:
+
+```bash
+systemd-analyze security wplan.service | tail -3
+```
+
+Ожидается exposure около 1.5–2.5 («OK»). Если сервис падает с `SIGSYS` —
+дело в `SystemCallFilter`; смотрите `journalctl -u wplan | grep -i seccomp` и
+добавляйте недостающую группу вызовов, а не отключайте фильтр целиком.
+Разбор остальных типовых сбоев — в `deploy/RUNBOOK-security-hardening.md`.
 
 **Важно про часовой пояс:** `OnCalendar=` в таймерах и `DAY_START_CUTOFF_HOUR`
 в `src/settings.py` (граница "начать"/"завершить" день) считаются в
@@ -220,35 +371,106 @@ VPS-провайдеров) — 06:55/14:55 UTC = 09:55/17:55 MSK. Если ва
 верните `OnCalendar=` к 09:55/17:55 + `DAY_START_CUTOFF_HOUR=14`, либо
 пересчитайте оба под фактический пояс сервера сами.
 
-### 7. Проверка
+### 9. Проверка
 
 ```bash
 systemctl list-timers wplan-morning.timer wplan-evening.timer
-systemctl start wplan.service   # ручной прогон
-journalctl -u wplan.service -n 30
+systemctl show wplan.service -p User -p Group     # ожидается User=wplan
 ```
 
-Ожидаемый лог: `Logged in as ...` → `Fetched N absence record(s)` → либо
-пропуск (если сегодня отпуск/day-off), либо
-`start_end_workday(is_start=...) -> ...`.
+**Осторожно с ручным прогоном.** `systemctl start wplan.service` — не
+безобидный smoke-test: он выполняет реальное действие с вашим рабочим днём.
+В зависимости от текущего часа (`DAY_START_CUTOFF_HOUR`) он либо начнёт, либо
+**завершит** день в WPlan. Если день уже открыт, а сейчас после границы —
+ручной запуск закроет его раньше времени, и поправить придётся вручную через
+веб-интерфейс. Повторный запуск не поможет: он вернёт `EDITING_NOT_AVAILABLE`.
+
+```bash
+systemctl start wplan.service
+journalctl -u wplan.service -n 30 --no-pager
+```
+
+Ожидаемый лог: `Logging in` → `Logged in as ...` →
+`Fetched N absence record(s)` → либо пропуск (если сегодня отпуск/day-off),
+либо `start_end_workday(is_start=...) -> ...` → `Done`.
+
+`Logged in as ...` заодно означает, что TLS-рукопожатие прошло с полной
+проверкой цепочки против корпоративного CA: при неверном пиннинге здесь был бы
+`CERTIFICATE_VERIFY_FAILED`.
+
+Проверить, что в журнал не попадают секреты и логин (важно после любой правки
+логирования):
+
+```bash
+journalctl -u wplan --since '-10min' --no-pager \
+  | grep -E 'api\.telegram\.org/bot|@office\.lan' \
+  && echo ">>> ПРОБЛЕМА: секрет или логин в журнале" || echo ">>> OK"
+```
+
+Ограничение по времени обязательно: без него grep поймает исторические записи
+старых версий, где логин ещё писался в лог.
 
 ### Обновление кода на сервере
 
 ```bash
 cd /opt/wplan-src && git pull
 cd wplan && ~/.local/bin/poetry install
-~/.local/bin/poetry run pyinstaller wplan-api.spec
-cp dist/wplan-api /opt/wplan/wplan-api
+
+~/.local/bin/poetry run pytest -q                          # 20 passed
+~/.local/bin/poetry run pyinstaller --clean --noconfirm wplan-api.spec
+~/.local/bin/poetry run pyi-archive_viewer -l dist/wplan-api | grep -i pem
+
+install -o root -g root -m 0755 dist/wplan-api /opt/wplan/wplan-api
 ```
-(`systemctl restart` не нужен — юниты `oneshot`, подхватят новый бинарник на следующий запуск таймера.)
+
+(`systemctl restart` не нужен — юниты `oneshot`, подхватят новый бинарник на следующий запуск таймера. Пользователя `wplan` создавать повторно тоже не надо.)
+
+Полный сценарий усиления безопасности на уже работающем сервере, с проверкой
+после каждого шага и откатом, — в `deploy/RUNBOOK-security-hardening.md`.
+
+## Сборка через Docker (необязательно)
+
+Нужна только чтобы получить Linux-бинарь, не заходя на VPS (например с macOS).
+В штатной схеме деплоя Docker не участвует.
+
+```bash
+docker build -t wplan-build .
+docker create --name wplan-tmp wplan-build
+docker cp wplan-tmp:/usr/local/bin/wplan-api ./wplan-api
+docker rm wplan-tmp
+```
+
+Зависимости ставятся из `poetry.lock` (сборка воспроизводима), финальный образ
+работает от непривилегированного пользователя, `.dockerignore` не пускает в
+контекст `.env`, `.claude.MD`, `.venv` и артефакты.
 
 ## Структура проекта
 
 ```
-main.py                 - точка входа: login -> проверка отсутствий -> start/end day -> Telegram
-src/settings.py         - переменные окружения (+ systemd-creds на проде)
-src/api/wplan_client.py - GraphQL-клиент (aiohttp)
-src/notify.py           - отправка уведомлений в Telegram (Bot API)
-wplan-api.spec          - PyInstaller-спек для сборки бинарника
-deploy/                 - шаблоны systemd-юнитов (сервис, таймеры, override для VPN)
+main.py                    - точка входа: login -> проверка отсутствий -> start/end day -> Telegram
+src/settings.py            - переменные окружения (+ systemd-creds на проде)
+src/api/wplan_client.py    - GraphQL-клиент (aiohttp), TLS-пиннинг корпоративного CA
+src/api/wplan-ca.pem       - корпоративная цепочка доверия (публичные сертификаты)
+src/notify.py              - отправка уведомлений в Telegram (Bot API)
+tests/                     - регрессионные тесты на находки аудита безопасности
+wplan-api.spec             - PyInstaller-спек (вкладывает wplan-ca.pem в бинарь)
+Dockerfile, .dockerignore  - необязательная сборка Linux-бинаря в контейнере
+deploy/                    - шаблоны systemd-юнитов (сервис, таймеры, override для VPN)
+deploy/RUNBOOK-*.md        - сценарий усиления безопасности на работающем сервере
 ```
+
+## Принятые решения по безопасности
+
+Коротко, чтобы не пришлось выяснять заново:
+
+- **TLS.** Доверяем только корпоративному корню из `src/api/wplan-ca.pem`,
+  а не отключаем проверку. `ssl=False` возвращать нельзя — за этим следит тест.
+- **Права.** Сервис работает от `wplan`, не от root. Секреты остаются
+  `root:root 600`: их читает systemd, а не процесс.
+- **Секреты в коде.** Пароль — через `systemd-creds`; остальное — через
+  окружение. Хардкода нет, в git-историю секреты не попадали (проверено).
+- **Логи.** В journald не пишутся ни Telegram-токен (он часть URL Bot API),
+  ни корпоративный логин. `accessToken` не логируется никогда.
+- **Внешние каналы.** В Telegram уходит только класс ошибки или коды
+  GraphQL-ошибок — не текст исключения с внутренними хостнеймами и URL.
+- **Зависимости.** Пиннинг через `poetry.lock`; проверять `pip-audit`.
