@@ -15,7 +15,7 @@ async def run_api_flow():
         is_start = datetime.now().hour < settings.DAY_START_CUTOFF_HOUR
 
         async with WplanApiClient() as client:
-            logger.info(f'Logging in as {settings.WPLAN_LOGIN}')
+            logger.info('Logging in')
             user = await client.login(settings.WPLAN_LOGIN, settings.WPLAN_PASS)
             logger.info(f'Logged in as {user["fio"]}')
 
@@ -44,8 +44,19 @@ async def run_api_flow():
             'Ваш рабочий день начат' if is_start else 'Ваш рабочий день окончен'
         )
         logger.info('Done')
+    except WplanApiError as e:
+        logger.exception('WPlan API вернул ошибку')
+        errors = e.args[0] if e.args else []
+        codes = [err.get('message', '?') for err in errors] if errors else []
+        await send_telegram_message(
+            f'Ошибка wplan: {", ".join(codes) or "неизвестная ошибка API"}'
+        )
+        raise
     except Exception as e:
-        await send_telegram_message(f'Ошибка wplan: {e}')
+        logger.exception('Непредвиденная ошибка')
+        await send_telegram_message(
+            f'Ошибка wplan: {type(e).__name__} (детали: journalctl -u wplan)'
+        )
         raise
 
 

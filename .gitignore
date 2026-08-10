@@ -2,8 +2,23 @@
 .venv
 .pytest_cache
 .env
+.env.local
+
+# Артефакты сборки. В git-историю уже попадали скомпилированные бинарники
+# (dist/wplan.sh) и build/main/* - бинарь, собранный на машине с заполненным
+# .env, это классический способ утечки секретов.
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+*.egg-info/
+.DS_Store
 
 # Claude Code / graphify
 .claude.MD
 .claude/
 **/graphify-out/
+
+# Отчёты аудита - локальные, не для репозитория
+wplan-security-review.md

@@ -1,7 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = []
+# Корпоративная цепочка доверия для wplan.office.lan. Без неё собранный бинарь
+# не сможет проверить сертификат сервера - см. _ca_bundle_path() в
+# src/api/wplan_client.py, который ищет файл в sys._MEIPASS/src/api/.
+datas = [('src/api/wplan-ca.pem', 'src/api')]
 binaries = []
 hiddenimports = []
 for pkg in ('aiohttp', 'dotenv'):

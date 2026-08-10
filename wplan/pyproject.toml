@@ -12,6 +12,15 @@ pyinstaller = ">=6.17.0,<7.0.0"
 aiohttp = "^3.14.3"
 python-dotenv = "^1.2.2"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^9.0.3"
+# Статический анализ безопасности: bandit -r src main.py
+bandit = "^1.8"
+
+[tool.pytest.ini_options]
+pythonpath = [".", "tests"]
+testpaths = ["tests"]
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,28 @@
+# Секреты - в образ не попадают ни при каких условиях.
+.env
+.env.*
+!.env.example
+.claude.MD
+.claude/
+
+# Окружение и IDE
+.git
+.gitignore
+.venv
+.idea
+.vscode
+
+# Артефакты
+__pycache__/
+*.py[cod]
+build/
+dist/
+graphify-out/
+.pytest_cache
+.DS_Store
+
+# Тяжёлое и ненужное для сборки
+*.gif
+README.md
+deploy/
+tests/

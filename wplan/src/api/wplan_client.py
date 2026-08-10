@@ -1,4 +1,7 @@
 import json
+import ssl
+import sys
+from pathlib import Path
 
 import aiohttp
 
@@ -6,9 +9,45 @@ from src import settings
 
 GRAPHQL_PATH = "/ru-RU/api/graphql"
 
+# Корпоративная цепочка доверия (RCA-CA + office-SUB-CA). Публичные данные,
+# не секрет: сервер отдаёт их каждому TLS-клиенту в открытом виде.
+CA_BUNDLE_NAME = "wplan-ca.pem"
+
+# Явные таймауты: у aiohttp по умолчанию total=300, что для oneshot-юнита,
+# запускаемого по таймеру, неоправданно долго.
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60, connect=10)
+
 
 class WplanApiError(Exception):
     pass
+
+
+def _ca_bundle_path() -> Path:
+    # В собранном PyInstaller-бинаре ресурсы распакованы в sys._MEIPASS,
+    # см. datas в wplan-api.spec.
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        return Path(meipass) / "src" / "api" / CA_BUNDLE_NAME
+    return Path(__file__).with_name(CA_BUNDLE_NAME)
+
+
+def _build_ssl_context() -> ssl.SSLContext:
+    """
+    Доверяем корпоративному корневому CA вместо отключения проверки.
+    """
+    ca_path = _ca_bundle_path()
+    if not ca_path.exists():
+        raise RuntimeError(
+            f"Не найден файл доверенных сертификатов {ca_path}. "
+            "Снять его заново (с поднятым VPN):\n"
+            "  openssl s_client -showcerts -connect wplan.office.lan:443 </dev/null "
+            "2>/dev/null | awk '/BEGIN CERT/,/END CERT/'"
+        )
+    ctx = ssl.create_default_context(cafile=str(ca_path))
+    ctx.check_hostname = True
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    return ctx
 
 
 class WplanApiClient:
@@ -18,16 +57,21 @@ class WplanApiClient:
         self._access_token: str | None = None
 
     async def __aenter__(self) -> "WplanApiClient":
-        # wplan.office.lan использует внутренний self-signed сертификат, которому
-        # не доверяет стандартный certifi-bundle aiohttp (хотя ОС/браузер его знают).
-        connector = aiohttp.TCPConnector(ssl=False)
-        self._session = aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar(), connector=connector)
+        connector = aiohttp.TCPConnector(ssl=_build_ssl_context())
+        self._session = aiohttp.ClientSession(
+            cookie_jar=aiohttp.CookieJar(),
+            connector=connector,
+            timeout=REQUEST_TIMEOUT,
+        )
         return self
 
     async def __aexit__(self, *exc) -> None:
         await self.close()
 
     async def close(self) -> None:
+        # Токен обнуляем до закрытия сессии: не держим его в атрибутах объекта
+        # дольше, чем нужно (иначе попадёт в core dump или в locals() трейсбека).
+        self._access_token = None
         if self._session is not None:
             await self._session.close()
             self._session = None
