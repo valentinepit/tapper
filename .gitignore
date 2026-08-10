@@ -22,3 +22,4 @@ dist/
 
 # Отчёты аудита - локальные, не для репозитория
 wplan-security-review.md
+_to_delete/

@@ -67,14 +67,34 @@ cd wplan
 ~/.local/bin/poetry run pyinstaller --clean --noconfirm wplan-api.spec
 ```
 
-**Проверка, что сертификат реально попал внутрь бинаря:**
+**Проверка, что сертификат реально попал внутрь бинаря.**
+
+Внимание: искать в бинаре текст `BEGIN CERTIFICATE` бесполезно — PyInstaller
+складывает `datas` в сжатый CArchive, и содержимое файлов в `strings` не
+появляется даже когда всё вложено правильно. Открытым текстом в TOC лежит
+только имя файла.
 
 ```bash
-strings dist/wplan-api | grep -c 'BEGIN CERTIFICATE'
+# быстрая проверка: имя файла в TOC
+strings dist/wplan-api | grep -c 'wplan-ca.pem'          # ожидается >= 1
+
+# авторитетная: список содержимого архива
+~/.local/bin/poetry run pyi-archive_viewer -l dist/wplan-api | grep -i pem
 ```
 
-Должно быть не 0. Если 0 — сертификат не вложился, разбираться с `datas`
-в `wplan-api.spec`.
+Вторая команда должна показать строку, оканчивающуюся на
+`'src/api/wplan-ca.pem'`. Если `pyi-archive_viewer` отсутствует:
+
+```bash
+~/.local/bin/poetry run python -c "
+from PyInstaller.archive.readers import CArchiveReader
+r = CArchiveReader('dist/wplan-api')
+print([n for n in r.toc if 'pem' in n])
+"
+```
+
+Ожидается `['src/api/wplan-ca.pem']`. Если пусто — сертификат не вложился,
+разбираться с `datas` в `wplan-api.spec`.
 
 ---
 
@@ -103,24 +123,31 @@ ls -l /opt/wplan/wplan-api
 
 ## 4. Права на секреты (M-2)
 
-Раньше `/etc/wplan/wplan.env` был `root:root 600`. Теперь его должен читать
-пользователь `wplan`, поэтому меняем группу, а не режим на 644.
+Важно: после перехода на `User=wplan` права на секреты ослаблять НЕ нужно.
+И `EnvironmentFile=`, и `LoadCredentialEncrypted=` обрабатывает сам systemd
+от root ещё до сброса привилегий — процесс получает готовые переменные
+окружения и расшифрованный credential в tmpfs, а сами файлы не читает.
+Поэтому оставляем строгие `root:root 600`, а не `root:wplan 640`.
 
 ```bash
-chown root:wplan /etc/wplan/wplan.env
-chmod 640 /etc/wplan/wplan.env
+chown root:root /etc/wplan/wplan.env
+chmod 600 /etc/wplan/wplan.env
 
-chown root:wplan /etc/wplan/wplan_pass.cred
-chmod 640 /etc/wplan/wplan_pass.cred
+chown root:root /etc/wplan/wplan_pass.cred
+chmod 600 /etc/wplan/wplan_pass.cred
 
 chown root:root /etc/wplan
-chmod 750 /etc/wplan
+chmod 700 /etc/wplan
+
 ls -la /etc/wplan/
 ```
 
-`wplan_pass.cred` зашифрован системным ключом хоста; расшифровку делает сам
-systemd до сброса привилегий, поэтому чтение файла пользователем `wplan`
-не требуется — но группа не помешает, если позже понадобится ручной запуск.
+Проверка, что пользователь `wplan` действительно НЕ имеет доступа
+(ожидается `Permission denied` — это правильный результат):
+
+```bash
+sudo -u wplan cat /etc/wplan/wplan.env
+```
 
 ---
 
@@ -221,7 +248,9 @@ openssl s_client -showcerts -connect wplan.office.lan:443 </dev/null 2>/dev/null
 
 и обновить `src/api/wplan-ca.pem` (оставить два последних блока — SUB-CA и root).
 
-**`Permission denied` на `/etc/wplan/wplan.env`** — вернитесь к шагу 4.
+**`Failed to load environment files`** — файл `/etc/wplan/wplan.env`
+недоступен самому systemd. Проверьте, что владелец `root:root` и путь
+существует; на права `600` systemd не жалуется, он читает их от root.
 
 ---
 
@@ -246,8 +275,8 @@ systemctl show wplan.service -p User -p Group
 # уровень изоляции
 systemd-analyze security wplan.service | tail -3
 
-# TLS-проверка включена (в бинаре есть сертификат, ssl=False отсутствует)
-strings /opt/wplan/wplan-api | grep -c 'BEGIN CERTIFICATE'
+# TLS-проверка включена: сертификат вложен в бинарь
+strings /opt/wplan/wplan-api | grep -c 'wplan-ca.pem'
 
 # секретов в журнале нет
 journalctl -u wplan --no-pager | grep -cE 'api\.telegram\.org/bot|@office\.lan'
@@ -256,8 +285,8 @@ journalctl -u wplan --no-pager | grep -cE 'api\.telegram\.org/bot|@office\.lan'
 ls -la /etc/wplan/
 ```
 
-Ожидаемо: `User=wplan`, exposure ниже 3, сертификатов ≥1, вхождений
-секретов `0`, права `640 root:wplan`.
+Ожидаемо: `User=wplan`, exposure ниже 3, вхождений `wplan-ca.pem` ≥1,
+вхождений секретов `0`, права `600 root:root` на файлы в `/etc/wplan`.
 
 ---
 
