@@ -1,11 +1,12 @@
 # Runbook: применение правок безопасности на VPS
 
-Порядок применения исправлений из `wplan-security-review.md` на сервере.
+Порядок применения исправлений безопасности на сервере: TLS-пиннинг (H-1),
+запуск от non-root + systemd hardening (H-2, M-2), утечка bot-токена в
+journald (H-3), пересылка текста исключений и ФИО в лог (M-4), прочие
+низкоприоритетные находки (L-1..L-5).
+
 Выполнять от root (или через `sudo`). Каждый шаг заканчивается проверкой —
 не переходите к следующему, пока проверка не прошла.
-
-Основание: H-1 (проверка TLS), H-2 + M-2 (запуск от non-root + hardening),
-H-3 (утечка bot-токена в journald), M-4, L-1..L-5.
 
 ---
 
@@ -205,7 +206,7 @@ systemctl status wplan.service --no-pager
 journalctl -u wplan -n 50 --no-pager
 ```
 
-**Что должно быть в журнале:** `Logging in`, `Logged in as ...`,
+**Что должно быть в журнале:** `Logging in`, `Login successful`,
 `Fetching absences`, и либо `start_end_workday(...) -> ...`, либо
 `Day already in the requested state ... - nothing to do`.
 

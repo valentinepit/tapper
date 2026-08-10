@@ -2,29 +2,25 @@ import json
 import ssl
 import sys
 from pathlib import Path
+from types import TracebackType
+from typing import Any
 
 import aiohttp
 
 from src import settings
 
 GRAPHQL_PATH = "/ru-RU/api/graphql"
-
-# Корпоративная цепочка доверия (RCA-CA + office-SUB-CA). Публичные данные,
-# не секрет: сервер отдаёт их каждому TLS-клиенту в открытом виде.
 CA_BUNDLE_NAME = "wplan-ca.pem"
-
-# Явные таймауты: у aiohttp по умолчанию total=300, что для oneshot-юнита,
-# запускаемого по таймеру, неоправданно долго.
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60, connect=10)
 
 
 class WplanApiError(Exception):
-    pass
+    def __init__(self, errors: list[dict[str, Any]] | None = None):
+        super().__init__(errors or [])
+        self.errors: list[dict[str, Any]] = errors or []
 
 
 def _ca_bundle_path() -> Path:
-    # В собранном PyInstaller-бинаре ресурсы распакованы в sys._MEIPASS,
-    # см. datas в wplan-api.spec.
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
         return Path(meipass) / "src" / "api" / CA_BUNDLE_NAME
@@ -32,9 +28,6 @@ def _ca_bundle_path() -> Path:
 
 
 def _build_ssl_context() -> ssl.SSLContext:
-    """
-    Доверяем корпоративному корневому CA вместо отключения проверки.
-    """
     ca_path = _ca_bundle_path()
     if not ca_path.exists():
         raise RuntimeError(
@@ -65,61 +58,72 @@ class WplanApiClient:
         )
         return self
 
-    async def __aexit__(self, *exc) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         await self.close()
 
     async def close(self) -> None:
-        # Токен обнуляем до закрытия сессии: не держим его в атрибутах объекта
-        # дольше, чем нужно (иначе попадёт в core dump или в locals() трейсбека).
         self._access_token = None
         if self._session is not None:
             await self._session.close()
             self._session = None
 
-    def _headers(self) -> dict:
+    def _require_session(self) -> aiohttp.ClientSession:
+        if self._session is None:
+            raise RuntimeError("WplanApiClient нужно использовать как 'async with'")
+        return self._session
+
+    def _headers(self) -> dict[str, str]:
         headers = {"content-type": "application/json"}
         if self._access_token:
             headers["authorization"] = f"Bearer {self._access_token}"
         return headers
 
     @staticmethod
-    def _extensions(sha256_hash: str) -> dict:
+    def _extensions(sha256_hash: str) -> dict[str, Any]:
         return {"persistedQuery": {"version": 1, "sha256Hash": sha256_hash}}
 
-    def _unwrap(self, payload: dict) -> dict:
+    def _unwrap(self, payload: dict[str, Any]) -> dict[str, Any]:
         if payload.get("errors"):
             raise WplanApiError(payload["errors"])
         return payload["data"]
 
-    async def _graphql_get(self, operation_name: str, variables: dict, sha256_hash: str) -> dict:
+    async def _graphql_get(
+        self, operation_name: str, variables: dict[str, Any], sha256_hash: str
+    ) -> dict[str, Any]:
         params = {
             "operationName": operation_name,
             "variables": json.dumps(variables),
             "extensions": json.dumps(self._extensions(sha256_hash)),
         }
-        async with self._session.get(
+        async with self._require_session().get(
             f"{self.base_url}{GRAPHQL_PATH}", params=params, headers=self._headers()
         ) as resp:
             resp.raise_for_status()
             return self._unwrap(await resp.json())
 
-    async def _graphql_post(self, operation_name: str, variables: dict, sha256_hash: str) -> dict:
+    async def _graphql_post(
+        self, operation_name: str, variables: dict[str, Any], sha256_hash: str
+    ) -> dict[str, Any]:
         body = {
             "operationName": operation_name,
             "variables": variables,
             "extensions": self._extensions(sha256_hash),
         }
-        async with self._session.post(
+        async with self._require_session().post(
             f"{self.base_url}{GRAPHQL_PATH}", json=body, headers=self._headers()
         ) as resp:
             resp.raise_for_status()
             return self._unwrap(await resp.json())
 
-    async def login(self, username: str, password: str) -> dict:
-        # Как в браузере: заход на страницу входа заводит cookie-сессию
-        # (NEXT_LOCALE и т.п.), без которой Login отвечает INVALID_USER_OR_PASSWORD
-        # даже с верными кредами.
-        async with self._session.get(f"{self.base_url}/ru-RU/sign-in") as resp:
+    async def login(self, username: str, password: str) -> dict[str, Any]:
+        # Без захода на страницу входа Login отвечает INVALID_USER_OR_PASSWORD
+        # даже с верными кредами - серверу нужна cookie-сессия со страницы.
+        async with self._require_session().get(f"{self.base_url}/ru-RU/sign-in") as resp:
             resp.raise_for_status()
 
         variables = {
@@ -136,18 +140,18 @@ class WplanApiClient:
         self._access_token = user["accessToken"]
         return user
 
-    async def check_vacations(self) -> list:
+    async def check_vacations(self) -> list[dict[str, Any]]:
         data = await self._graphql_get(
             "PersonalVacationsByWorkingDays", {}, settings.VACATIONS_QUERY_HASH
         )
         return data["personalVacationsByWorkingDays"]
 
-    async def start_end_workday(self, is_start: bool) -> dict:
+    async def start_end_workday(self, is_start: bool) -> dict[str, Any]:
         return await self._graphql_post(
             "StartOrFinishDay", {"isStart": is_start}, settings.START_FINISH_QUERY_HASH
         )
 
-    async def get_absences(self) -> list:
+    async def get_absences(self) -> list[dict[str, Any]]:
         data = await self._graphql_get(
             "AbsenceRequestAllPersonal", {}, settings.ABSENCES_QUERY_HASH
         )

@@ -390,11 +390,11 @@ systemctl start wplan.service
 journalctl -u wplan.service -n 30 --no-pager
 ```
 
-Ожидаемый лог: `Logging in` → `Logged in as ...` →
+Ожидаемый лог: `Logging in` → `Login successful` →
 `Fetched N absence record(s)` → либо пропуск (если сегодня отпуск/day-off),
 либо `start_end_workday(is_start=...) -> ...` → `Done`.
 
-`Logged in as ...` заодно означает, что TLS-рукопожатие прошло с полной
+`Login successful` заодно означает, что TLS-рукопожатие прошло с полной
 проверкой цепочки против корпоративного CA: при неверном пиннинге здесь был бы
 `CERTIFICATE_VERIFY_FAILED`.
 
@@ -413,6 +413,8 @@ journalctl -u wplan --since '-10min' --no-pager \
 ### Обновление кода на сервере
 
 ```bash
+cp /opt/wplan/wplan-api /root/wplan-api.bak.$(date +%Y%m%d)   # бэкап перед обновлением
+
 cd /opt/wplan-src && git pull
 cd wplan && ~/.local/bin/poetry install
 
@@ -425,24 +427,10 @@ install -o root -g root -m 0755 dist/wplan-api /opt/wplan/wplan-api
 
 (`systemctl restart` не нужен — юниты `oneshot`, подхватят новый бинарник на следующий запуск таймера. Пользователя `wplan` создавать повторно тоже не надо.)
 
+Откат при проблеме — вернуть бэкап: `install -o root -g root -m 0755 /root/wplan-api.bak.YYYYMMDD /opt/wplan/wplan-api`.
+
 Полный сценарий усиления безопасности на уже работающем сервере, с проверкой
 после каждого шага и откатом, — в `deploy/RUNBOOK-security-hardening.md`.
-
-## Сборка через Docker (необязательно)
-
-Нужна только чтобы получить Linux-бинарь, не заходя на VPS (например с macOS).
-В штатной схеме деплоя Docker не участвует.
-
-```bash
-docker build -t wplan-build .
-docker create --name wplan-tmp wplan-build
-docker cp wplan-tmp:/usr/local/bin/wplan-api ./wplan-api
-docker rm wplan-tmp
-```
-
-Зависимости ставятся из `poetry.lock` (сборка воспроизводима), финальный образ
-работает от непривилегированного пользователя, `.dockerignore` не пускает в
-контекст `.env`, `.claude.MD`, `.venv` и артефакты.
 
 ## Структура проекта
 
@@ -454,10 +442,12 @@ src/api/wplan-ca.pem       - корпоративная цепочка дове�
 src/notify.py              - отправка уведомлений в Telegram (Bot API)
 tests/                     - регрессионные тесты на находки аудита безопасности
 wplan-api.spec             - PyInstaller-спек (вкладывает wplan-ca.pem в бинарь)
-Dockerfile, .dockerignore  - необязательная сборка Linux-бинаря в контейнере
 deploy/                    - шаблоны systemd-юнитов (сервис, таймеры, override для VPN)
 deploy/RUNBOOK-*.md        - сценарий усиления безопасности на работающем сервере
 ```
+
+Сборка — только через PyInstaller напрямую на целевом Linux-сервере
+(кросс-компиляция не поддерживается, поэтому Docker для сборки не используется).
 
 ## Принятые решения по безопасности
 
@@ -468,9 +458,11 @@ deploy/RUNBOOK-*.md        - сценарий усиления безопасн�
 - **Права.** Сервис работает от `wplan`, не от root. Секреты остаются
   `root:root 600`: их читает systemd, а не процесс.
 - **Секреты в коде.** Пароль — через `systemd-creds`; остальное — через
-  окружение. Хардкода нет, в git-историю секреты не попадали (проверено).
-- **Логи.** В journald не пишутся ни Telegram-токен (он часть URL Bot API),
-  ни корпоративный логин. `accessToken` не логируется никогда.
+  окружение. Хардкода в текущих `.py`-файлах нет. В историю репозитория ранее
+  попадали собранные бинарники (см. комментарий в `.gitignore`) — это отдельный
+  риск утечки через артефакт сборки, а не через исходники.
+- **Логи.** В journald не пишутся Telegram-токен (он часть URL Bot API),
+  корпоративный логин и ФИО сотрудника. `accessToken` не логируется никогда.
 - **Внешние каналы.** В Telegram уходит только класс ошибки или коды
   GraphQL-ошибок — не текст исключения с внутренними хостнеймами и URL.
 - **Зависимости.** Пиннинг через `poetry.lock`; проверять `pip-audit`.
