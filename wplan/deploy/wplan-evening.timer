@@ -1,11 +1,13 @@
 [Unit]
-Description=Run wplan.service around 18:00 Europe/Moscow (+-5 min jitter)
+Description=Run wplan.service around 18:45 Europe/Moscow (+-5 min jitter)
 
 [Timer]
-# 14:55 UTC = 17:55 MSK (Europe/Moscow, UTC+3) - server assumed to run in UTC.
-# If your server's local timezone differs, adjust this to match, or run
-# `timedatectl set-timezone Europe/Moscow` and use 17:55 here instead.
-OnCalendar=Mon..Fri *-*-* 14:55:00
+# 15:40 UTC = 18:40 MSK (Europe/Moscow, UTC+3) - server assumed to run in UTC.
+# Сдвинуто на +45 минут от исходных 17:55 MSK по просьбе пользователя
+# (рабочий день закрывается позже). Если ваш сервер в другом часовом
+# поясе - либо `timedatectl set-timezone Europe/Moscow` и используйте
+# 18:40 здесь, либо пересчитайте под фактический пояс сервера сами.
+OnCalendar=Mon..Fri *-*-* 15:40:00
 RandomizedDelaySec=600
 Persistent=true
 Unit=wplan.service

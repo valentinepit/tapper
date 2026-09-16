@@ -143,7 +143,7 @@ poetry run python -c "import asyncio; from src.notify import send_telegram_messa
 ## Продакшен: разворачивание на Linux VPS
 
 Сценарий: VPS сам подключается к корпоративной сети через OpenVPN и дважды в
-будний день (~10:00 и ~18:00, окно ±5 минут) без участия человека дёргает
+будний день (~10:00 и ~18:45, окно ±5 минут) без участия человека дёргает
 `main.py`.
 
 Готовые шаблоны systemd-юнитов — в `deploy/`.
@@ -366,9 +366,10 @@ systemd-analyze security wplan.service | tail -3
 **локальном времени VPS**, а офис — в `Europe/Moscow` (UTC+3). Шаблоны в
 `deploy/*.timer` и `DAY_START_CUTOFF_HOUR=11` в `src/settings.py` уже
 рассчитаны на то, что VPS работает в **UTC** (типичный дефолт для большинства
-VPS-провайдеров) — 06:55/14:55 UTC = 09:55/17:55 MSK. Если ваш сервер в
-другом часовом поясе — либо `timedatectl set-timezone Europe/Moscow` и
-верните `OnCalendar=` к 09:55/17:55 + `DAY_START_CUTOFF_HOUR=14`, либо
+VPS-провайдеров) — 06:55/15:40 UTC = 09:55/18:40 MSK (вечер сдвинут на +45
+минут от исходных 17:55 MSK - конец дня закрывается позже). Если ваш сервер
+в другом часовом поясе — либо `timedatectl set-timezone Europe/Moscow` и
+верните `OnCalendar=` к 09:55/18:40 + `DAY_START_CUTOFF_HOUR=14`, либо
 пересчитайте оба под фактический пояс сервера сами.
 
 ### 9. Проверка
