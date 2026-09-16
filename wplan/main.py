@@ -45,10 +45,9 @@ async def run_api_flow() -> None:
         logger.info('Done')
     except WplanApiError as e:
         logger.exception('WPlan API вернул ошибку')
-        codes = [err.get('message', '?') for err in e.errors]
-        await send_telegram_message(
-            f'Ошибка wplan: {", ".join(codes) or "неизвестная ошибка API"}'
-        )
+        # str(e) уже содержит этап (operationName) и, если дело в устаревшем
+        # persisted-query хэше, подсказку какую переменную обновить.
+        await send_telegram_message(f'Ошибка wplan: {e}')
         raise
     except Exception as e:
         logger.exception('Непредвиденная ошибка')

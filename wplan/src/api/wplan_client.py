@@ -14,10 +14,43 @@ CA_BUNDLE_NAME = "wplan-ca.pem"
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60, connect=10)
 
 
+# operationName графql-запроса -> переменная окружения с его persisted-query
+# хэшем. Нужно, чтобы при PERSISTED_QUERY_NOT_FOUND в логе/Telegram сразу было
+# видно, какой из четырёх хэшей протух, а не просто "запрос не найден".
+HASH_ENV_VAR_BY_OPERATION = {
+    "Login": "LOGIN_QUERY_HASH",
+    "PersonalVacationsByWorkingDays": "VACATIONS_QUERY_HASH",
+    "StartOrFinishDay": "START_FINISH_QUERY_HASH",
+    "AbsenceRequestAllPersonal": "ABSENCES_QUERY_HASH",
+}
+
+
 class WplanApiError(Exception):
-    def __init__(self, errors: list[dict[str, Any]] | None = None):
+    def __init__(
+        self,
+        errors: list[dict[str, Any]] | None = None,
+        operation_name: str | None = None,
+    ):
         super().__init__(errors or [])
         self.errors: list[dict[str, Any]] = errors or []
+        self.operation_name: str | None = operation_name
+
+    def __str__(self) -> str:
+        codes = [err.get("message", "?") for err in self.errors]
+        summary = ", ".join(codes) or "неизвестная ошибка API"
+        if not self.operation_name:
+            return summary
+        is_stale_hash = any(
+            err.get("extensions", {}).get("code") == "PERSISTED_QUERY_NOT_FOUND"
+            for err in self.errors
+        )
+        if is_stale_hash:
+            env_var = HASH_ENV_VAR_BY_OPERATION.get(self.operation_name, "?")
+            return (
+                f"{summary} на этапе '{self.operation_name}' - "
+                f"устарел persisted-query хэш, обновите {env_var}"
+            )
+        return f"{summary} (этап '{self.operation_name}')"
 
 
 def _ca_bundle_path() -> Path:
@@ -87,9 +120,9 @@ class WplanApiClient:
     def _extensions(sha256_hash: str) -> dict[str, Any]:
         return {"persistedQuery": {"version": 1, "sha256Hash": sha256_hash}}
 
-    def _unwrap(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _unwrap(self, payload: dict[str, Any], operation_name: str) -> dict[str, Any]:
         if payload.get("errors"):
-            raise WplanApiError(payload["errors"])
+            raise WplanApiError(payload["errors"], operation_name=operation_name)
         return payload["data"]
 
     async def _graphql_get(
@@ -104,7 +137,7 @@ class WplanApiClient:
             f"{self.base_url}{GRAPHQL_PATH}", params=params, headers=self._headers()
         ) as resp:
             resp.raise_for_status()
-            return self._unwrap(await resp.json())
+            return self._unwrap(await resp.json(), operation_name)
 
     async def _graphql_post(
         self, operation_name: str, variables: dict[str, Any], sha256_hash: str
@@ -118,7 +151,7 @@ class WplanApiClient:
             f"{self.base_url}{GRAPHQL_PATH}", json=body, headers=self._headers()
         ) as resp:
             resp.raise_for_status()
-            return self._unwrap(await resp.json())
+            return self._unwrap(await resp.json(), operation_name)
 
     async def login(self, username: str, password: str) -> dict[str, Any]:
         # Без захода на страницу входа Login отвечает INVALID_USER_OR_PASSWORD
