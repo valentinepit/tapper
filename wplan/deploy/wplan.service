@@ -9,17 +9,11 @@ ExecStart=/opt/wplan/wplan-api
 EnvironmentFile=/etc/wplan/wplan.env
 LoadCredentialEncrypted=wplan_pass:/etc/wplan/wplan_pass.cred
 
-# --- под каким пользователем работаем ---
-# Утилите не нужен root ни для одной операции: она только ходит в сеть и
-# распаковывает свой PyInstaller-архив в приватный /tmp. Раньше здесь не было
-# User=, и любая уязвимость в aiohttp/парсере JSON/bootloader'е означала бы
-# компрометацию всего VPS, а не одного аккаунта.
 # Создать пользователя перед первым запуском:
 #   useradd --system --no-create-home --shell /usr/sbin/nologin wplan
 User=wplan
 Group=wplan
 
-# --- изоляция файловой системы ---
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
@@ -29,7 +23,6 @@ ProtectProc=invisible
 ProcSubset=pid
 UMask=0077
 
-# --- изоляция ядра ---
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
@@ -41,19 +34,16 @@ RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 
-# --- сеть и capabilities ---
-# AF_UNIX нужен для резолвинга имён через systemd-resolved/nscd, без него
-# DNS отвалится с невнятной ошибкой.
+# AF_UNIX нужен для резолвинга имён через systemd-resolved/nscd.
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 CapabilityBoundingSet=
 AmbientCapabilities=
 
-# --- системные вызовы ---
-# Если после включения сервис падает с SIGSYS, посмотреть, какой вызов
-# заблокирован: journalctl -u wplan | grep -i seccomp
+# При SIGSYS смотреть, какой вызов заблокирован: journalctl -u wplan | grep -i seccomp
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
 SystemCallArchitectures=native
 
-# Клиент сам ограничен ClientTimeout(total=60); 180 - страховка сверху.
-TimeoutStartSec=180
+# До 3 последовательных запросов к wplan (ClientTimeout total=60 каждый) плюс
+# Telegram-уведомление (total=15) - до 195с в худшем случае, отсюда запас.
+TimeoutStartSec=240

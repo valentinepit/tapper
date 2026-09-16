@@ -1,8 +1,7 @@
 """Регрессионные тесты на находки аудита безопасности.
 
-Каждый тест закрепляет одну исправленную уязвимость, чтобы её нельзя было
-случайно вернуть при рефакторинге. Идентификаторы (H-1, H-3, ...)
-соответствуют отчёту wplan-security-review.md.
+Каждый тест закрепляет одну исправленную уязвимость (H-1, H-3, M-4, L-3, L-5),
+чтобы её нельзя было случайно вернуть при рефакторинге.
 """
 
 import asyncio
@@ -15,19 +14,21 @@ from pathlib import Path
 
 import aiohttp
 import pytest
-
 from conftest import FAKE_TOKEN
+
 from src import notify, settings
-from src.api.wplan_client import WplanApiClient, _build_ssl_context, _ca_bundle_path
+from src.api.wplan_client import (
+    WplanApiClient,
+    WplanApiError,
+    _build_ssl_context,
+    _ca_bundle_path,
+)
 
 
 def executable_code(path: Path) -> str:
-    """Исходник без комментариев и строковых литералов.
-
-    Нужно для статических проверок: искать запрещённые конструкции в сыром
-    тексте нельзя — они упоминаются в комментариях и docstring'ах, которые как
-    раз объясняют, почему так делать не надо.
-    """
+    """Исходник без комментариев и строковых литералов (для статических проверок:
+    искать запрещённые конструкции в сыром тексте нельзя — они упоминаются в
+    комментариях и docstring'ах, объясняющих, почему так делать не надо)."""
     source = path.read_text(encoding="utf-8")
     kept = []
     for tok in tokenize.generate_tokens(io.StringIO(source).readline):
@@ -203,41 +204,94 @@ def test_h3_failed_notification_does_not_raise():
 
 
 # --------------------------------------------------------------------------
-# M-4: текст исключения не пересылается в Telegram дословно
+# M-4: текст исключения не пересылается в Telegram дословно, ФИО/логин не логируются
+#
+# Поведенческие тесты вместо grep по исходнику: проверка текста файла
+# обходится тривиальным рефакторингом (другие кавычки, конкатенация вместо
+# f-строки) без возврата самой уязвимости.
 # --------------------------------------------------------------------------
 
-def uncommented_source(path: Path) -> str:
-    """Исходник без строк-комментариев, но со строковыми литералами.
+class _BoomOnEnterClient:
+    """Клиент, падающий с исключением, содержащим чувствительную подстроку."""
 
-    Для проверок содержимого f-строк tokenize не подходит: в Python 3.11
-    f-строка — один STRING-токен, а в 3.12 разбирается на части, и статическая
-    проверка вела бы себя по-разному на разных версиях.
-    """
-    return "\n".join(
-        line for line in path.read_text(encoding="utf-8").splitlines()
-        if not line.strip().startswith("#")
-    )
+    async def __aenter__(self):
+        raise RuntimeError("https://internal-host.office.lan/secret-path leaked")
+
+    async def __aexit__(self, *exc):
+        return False
 
 
-def test_m4_main_does_not_forward_raw_exception_text():
+def test_m4_main_does_not_forward_raw_exception_text(monkeypatch):
     import main
 
-    source = uncommented_source(Path(main.__file__))
-    assert "Ошибка wplan: {e}" not in source, (
-        "сырой текст исключения снова уходит в Telegram: там оказываются "
-        "внутренний хостнейм, полный URL эндпоинта и возможный трейсбек сервера"
-    )
-    assert "type(e).__name__" in source, "ожидаем пересылку только класса ошибки"
+    sent = []
+
+    async def _fake_notify(text):
+        sent.append(text)
+
+    monkeypatch.setattr(main, "WplanApiClient", lambda *a, **kw: _BoomOnEnterClient())
+    monkeypatch.setattr(main, "send_telegram_message", _fake_notify)
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(main.run_api_flow())
+
+    assert len(sent) == 1
+    assert "internal-host.office.lan" not in sent[0], f"хостнейм из исключения утёк в Telegram: {sent[0]}"
+    assert "RuntimeError" in sent[0], "ожидаем пересылку только класса ошибки"
 
 
-def test_m4_login_is_not_logged():
+class _FakeWorkdayClient:
+    """Успешный логин, но без нужного метода дальше — для теста ФИО в логе достаточно login()."""
+
+    def __init__(self, user):
+        self._user = user
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def login(self, username, password):
+        return self._user
+
+    async def get_absences(self):
+        return []
+
+    async def start_end_workday(self, is_start):
+        return {"ok": True}
+
+
+def test_m4_login_is_not_logged(monkeypatch, caplog):
     import main
 
-    source = uncommented_source(Path(main.__file__))
-    assert "settings.WPLAN_LOGIN}" not in source, (
-        "корпоративный логин снова пишется в журнал"
-    )
-    assert "WPLAN_LOGIN" in source, "логин по-прежнему должен использоваться для входа"
+    fake_user = {"fio": "Иванов Иван Иванович", "accessToken": "fake-jwt"}
+
+    async def _fake_notify(text):
+        pass
+
+    monkeypatch.setattr(main, "WplanApiClient", lambda *a, **kw: _FakeWorkdayClient(fake_user))
+    monkeypatch.setattr(main, "send_telegram_message", _fake_notify)
+
+    with caplog.at_level(logging.INFO, logger=main.logger.name):
+        asyncio.run(main.run_api_flow())
+
+    dump = "\n".join(r.getMessage() for r in caplog.records)
+    assert settings.WPLAN_LOGIN not in dump, "корпоративный логин снова пишется в журнал"
+    assert fake_user["fio"] not in dump, "ФИО сотрудника снова пишется в журнал"
+
+
+# --------------------------------------------------------------------------
+# WplanApiError.errors — типизированный доступ вместо e.args[0] в двух местах
+# --------------------------------------------------------------------------
+
+def test_wplan_api_error_exposes_typed_errors():
+    err = WplanApiError([{"message": "SOME_CODE"}])
+    assert err.errors == [{"message": "SOME_CODE"}]
+
+
+def test_wplan_api_error_errors_defaults_to_empty_list():
+    assert WplanApiError().errors == []
 
 
 # --------------------------------------------------------------------------

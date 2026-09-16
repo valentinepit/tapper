@@ -24,9 +24,8 @@ def _require(env_var: str) -> str:
 
 
 def _read_credential(name: str, env_var: str) -> str:
-    # systemd's LoadCredentialEncrypted= decrypts into a tmpfs file under
-    # $CREDENTIALS_DIRECTORY right before the service starts - prefer that over
-    # a plaintext env var when running under such a unit.
+    # systemd LoadCredentialEncrypted= расшифровывает секрет в tmpfs-файл
+    # под CREDENTIALS_DIRECTORY перед запуском - используем его, если есть.
     creds_dir = os.environ.get("CREDENTIALS_DIRECTORY")
     if creds_dir:
         cred_path = Path(creds_dir) / name
@@ -49,12 +48,31 @@ VACATIONS_QUERY_HASH = _require("VACATIONS_QUERY_HASH")
 START_FINISH_QUERY_HASH = _require("START_FINISH_QUERY_HASH")
 ABSENCES_QUERY_HASH = _require("ABSENCES_QUERY_HASH")
 
+
+def _optional(env_var: str) -> str | None:
+    """Как _require, но без исключения - для переменных, которых пока может
+    не быть (например *_QUERY_TEXT до того, как текст запроса будет снят
+    вручную с прода - см. self-heal в wplan_client.py)."""
+    return os.environ.get(env_var) or None
+
+
+# Полный текст persisted-query запроса (поле "query" в GraphQL-запросе).
+# В обычном режиме Apollo Client отправляет только sha256-хэш запроса -
+# сервер знает текст заранее и достаёт его из своего кэша. Текст нужен
+# ТОЛЬКО для self-heal в wplan_client.py: если хэш вдруг протух
+# (PERSISTED_QUERY_NOT_FOUND), клиент один раз повторяет запрос уже с этим
+# полным текстом, и сервер сам переобновляет свой кэш для этого хэша.
+# Пока текст для конкретной операции не задан - self-heal для неё просто
+# недоступен, ошибка устаревшего хэша всплывает как раньше (см.
+# QUERY_TEXT_ENV_VAR_BY_OPERATION и WplanApiError.__str__).
+LOGIN_QUERY_TEXT = _optional("LOGIN_QUERY_TEXT")
+VACATIONS_QUERY_TEXT = _optional("VACATIONS_QUERY_TEXT")
+START_FINISH_QUERY_TEXT = _optional("START_FINISH_QUERY_TEXT")
+ABSENCES_QUERY_TEXT = _optional("ABSENCES_QUERY_TEXT")
+
 TELEGRAM_BOT_TOKEN = _require("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = _require("TELEGRAM_CHAT_ID")
 
-# Между утренним (~10:00) и вечерним (~18:00) запуском ПО МЕСТНОМУ ВРЕМЕНИ
-# ОФИСА (Europe/Moscow, UTC+3) - используется как граница, чтобы отличить
-# "начать день" от "завершить день". datetime.now() берёт локальное время
-# СЕРВЕРА (обычно UTC на VPS), поэтому это не 14, а 14-3=11 - если сервер
-# не в UTC, пересчитайте под его локальный часовой пояс.
+# Сравнивается с datetime.now().hour ПО ВРЕМЕНИ СЕРВЕРА (обычно UTC).
+# Офис — Europe/Moscow (UTC+3), поэтому 11 здесь соответствует ~14:00 MSK.
 DAY_START_CUTOFF_HOUR = 11

@@ -26,6 +26,6 @@ _FAKE_ENV = {
 os.environ["WPLAN_SKIP_DOTENV"] = "1"
 
 for _key, _value in _FAKE_ENV.items():
-    os.environ.setdefault(_key, _value)
+    os.environ[_key] = _value  # принудительно: setdefault не подменит уже экспортированный настоящий секрет
 
 FAKE_TOKEN = _FAKE_ENV["TELEGRAM_BOT_TOKEN"]
