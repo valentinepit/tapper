@@ -34,13 +34,15 @@ PERSISTED_QUERY_NOT_FOUND_ERRORS = [
 
 
 class _FakeGraphQLResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, status=200):
         self._payload = payload
+        self.status = status
 
     def raise_for_status(self):
-        pass
+        if self.status >= 400:
+            raise RuntimeError(f"HTTP {self.status}")  # как aiohttp: причина теряется
 
-    async def json(self):
+    async def json(self, **kwargs):
         return self._payload
 
     async def __aenter__(self):
@@ -65,7 +67,10 @@ class _FakeGraphQLSession:
 
     def _next(self, method, **kwargs):
         self.calls.append((method, kwargs))
-        return _FakeGraphQLResponse(self._payloads.pop(0))
+        item = self._payloads.pop(0)
+        if isinstance(item, _FakeGraphQLResponse):
+            return item
+        return _FakeGraphQLResponse(item)
 
     def get(self, url, **kwargs):
         return self._next("get", url=url, **kwargs)
@@ -101,6 +106,10 @@ def test_self_heal_recovers_when_query_text_is_known(monkeypatch, caplog):
     _, second_kwargs = fake_session.calls[1]
     assert "query" not in first_kwargs["params"], "первая попытка обязана быть оптимистичной (без текста)"
     assert second_kwargs["params"]["query"] == "query AbsenceRequestAllPersonal { id }"
+    assert "extensions" in first_kwargs["params"]
+    assert "extensions" not in second_kwargs["params"], (
+        "повтор с текстом не должен нести хэш: иначе Apollo сверит sha256 и ответит 400"
+    )
 
     dump = "\n".join(r.getMessage() for r in caplog.records)
     assert "SELF_HEAL_OUTCOME=healed" in dump
@@ -186,3 +195,25 @@ def test_self_heal_succeeds_transparently_for_a_mutation(monkeypatch):
     _, second_kwargs = fake_session.calls[1]
     assert "query" not in first_kwargs["json"], "первая попытка обязана быть оптимистичной (без текста)"
     assert second_kwargs["json"]["query"] == "mutation StartOrFinishDay { ok }"
+    assert "extensions" not in second_kwargs["json"]
+
+
+def test_http_400_with_graphql_errors_becomes_wplan_api_error(monkeypatch):
+    """Регрессия 14.10.2026: Login -> PERSISTED_QUERY_NOT_FOUND -> повтор с
+    текстом -> HTTP 400. Раньше это был голый ClientResponseError без причины,
+    теперь - WplanApiError с текстом ошибки от сервера."""
+    monkeypatch.setattr(settings, "LOGIN_QUERY_TEXT", "mutation Login { ok }")
+
+    fake_session = _FakeGraphQLSession(
+        [
+            {"errors": PERSISTED_QUERY_NOT_FOUND_ERRORS},
+            _FakeGraphQLResponse(
+                {"errors": [{"message": "GRAPHQL_VALIDATION_FAILED: Cannot query field"}]},
+                status=400,
+            ),
+        ]
+    )
+    client = _client_with_fake_session(fake_session)
+
+    with pytest.raises(WplanApiError, match="GRAPHQL_VALIDATION_FAILED"):
+        asyncio.run(client._graphql("post", "Login", {}, settings.LOGIN_QUERY_HASH))

@@ -156,6 +156,28 @@ class WplanApiClient:
             for err in payload.get("errors") or []
         )
 
+    @staticmethod
+    async def _read_payload(resp: aiohttp.ClientResponse) -> dict[str, Any]:
+        """Тело ответа GraphQL, в том числе при HTTP 4xx.
+
+        Apollo отвечает 400 с JSON {"errors": [...]} на невалидный запрос
+        (например, несовпадение sha256 и текста query). raise_for_status()
+        выбросил бы голый ClientResponseError и спрятал бы причину - поэтому
+        при 4xx сначала пытаемся отдать GraphQL-ошибки наверх как обычный
+        payload, а raise_for_status() оставляем для всего остального (5xx,
+        HTML-страницы прокси и т.п.).
+        """
+        if 400 <= resp.status < 500:
+            try:
+                payload = await resp.json(content_type=None)
+            except (aiohttp.ContentTypeError, ValueError):
+                payload = None
+            if isinstance(payload, dict) and payload.get("errors"):
+                logger.warning("wplan ответил HTTP %s с GraphQL-ошибками", resp.status)
+                return payload
+        resp.raise_for_status()
+        return await resp.json()
+
     async def _send(
         self,
         method: str,
@@ -164,34 +186,32 @@ class WplanApiClient:
         sha256_hash: str,
         query_text: str | None,
     ) -> dict[str, Any]:
-        extensions = self._extensions(sha256_hash)
+        # С полным текстом шлём обычный (не persisted) запрос - БЕЗ хэша.
+        # Иначе Apollo сверяет sha256(query) с переданным хэшем побайтово, а
+        # сохранённый в .env текст отформатирован иначе, чем у Apollo Client
+        # в браузере, -> HTTP 400 "provided sha does not match query".
+        extensions = None if query_text else self._extensions(sha256_hash)
         session = self._require_session()
+        url = f"{self.base_url}{GRAPHQL_PATH}"
         if method == "get":
             params: dict[str, Any] = {
                 "operationName": operation_name,
                 "variables": json.dumps(variables),
-                "extensions": json.dumps(extensions),
             }
+            if extensions:
+                params["extensions"] = json.dumps(extensions)
             if query_text:
                 params["query"] = query_text
-            async with session.get(
-                f"{self.base_url}{GRAPHQL_PATH}", params=params, headers=self._headers()
-            ) as resp:
-                resp.raise_for_status()
-                return await resp.json()
+            async with session.get(url, params=params, headers=self._headers()) as resp:
+                return await self._read_payload(resp)
 
-        body: dict[str, Any] = {
-            "operationName": operation_name,
-            "variables": variables,
-            "extensions": extensions,
-        }
+        body: dict[str, Any] = {"operationName": operation_name, "variables": variables}
+        if extensions:
+            body["extensions"] = extensions
         if query_text:
             body["query"] = query_text
-        async with session.post(
-            f"{self.base_url}{GRAPHQL_PATH}", json=body, headers=self._headers()
-        ) as resp:
-            resp.raise_for_status()
-            return await resp.json()
+        async with session.post(url, json=body, headers=self._headers()) as resp:
+            return await self._read_payload(resp)
 
     async def _graphql(
         self,
