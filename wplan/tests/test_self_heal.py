@@ -217,3 +217,25 @@ def test_http_400_with_graphql_errors_becomes_wplan_api_error(monkeypatch):
 
     with pytest.raises(WplanApiError, match="GRAPHQL_VALIDATION_FAILED"):
         asyncio.run(client._graphql("post", "Login", {}, settings.LOGIN_QUERY_HASH))
+
+
+def test_login_without_access_token_falls_back_to_cookie_auth(monkeypatch):
+    """Регрессия 28.10.2026: новая схема wplan не отдаёт accessToken в Login.
+    Логин не должен падать с KeyError, а следующие запросы не должны нести
+    заголовок authorization - авторизует cookie сессии."""
+    fake_session = _FakeGraphQLSession(
+        [
+            {},  # GET /ru-RU/sign-in
+            {"data": {"jwtLogin": {"_id": "1", "fio": "x"}}},
+            {"data": {"absenceRequestAllPersonal": []}},
+        ]
+    )
+    client = _client_with_fake_session(fake_session)
+
+    async def flow():
+        await client.login("user", "pass")
+        return await client.get_absences()
+
+    assert asyncio.run(flow()) == []
+    _, absences_kwargs = fake_session.calls[2]
+    assert "authorization" not in absences_kwargs["headers"]

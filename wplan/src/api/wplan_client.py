@@ -310,7 +310,15 @@ class WplanApiClient:
         }
         data = await self._graphql_post("Login", variables, settings.LOGIN_QUERY_HASH)
         user = data["jwtLogin"]
-        self._access_token = user["accessToken"]
+        # С обновления wplan в конце октября 2026 accessToken из ответа Login
+        # убран: сервер выставляет авторизацию cookie, а её сохраняет
+        # CookieJar сессии. Если токен всё же пришёл (старая схема) - шлём
+        # его как Bearer, как раньше.
+        self._access_token = user.get("accessToken")
+        logger.info(
+            "Авторизация: %s",
+            "Bearer-токен" if self._access_token else "cookie сессии (accessToken в ответе нет)",
+        )
         return user
 
     async def check_vacations(self) -> list[dict[str, Any]]:
